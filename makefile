@@ -80,6 +80,7 @@ grind: unit_library
 clean:
 	rm -f unit_geometry unit_lists unit_storage unit_image unit_blob unit_model unit_library
 	rm -f test_image.tiff performance_imprint.tiff worm_imprint.tiff worm_noisy.tiff
+	rm -f test_blob.log
 	rm -f *.o
 	rm -f test*.tiff
 	rm -f 20071226_105033/*
