@@ -5,7 +5,7 @@
 SHELL=/bin/bash
 
 ifeq ($(OS),Windows_NT)
-    CC = mingw32-g++ -std=c++11
+    CC = mingw32-g++ -std=gnu++11
     FLAGS = -Wall -O2 -fno-strict-aliasing -ggdb3 -shared
     OUTDIR = lib
     TGT = -DWINDOWS 
@@ -62,7 +62,7 @@ MWT_Library.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT
 
 ifeq ($(OS),Windows_NT)
     DLL: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Blob.h MWT_Blob.o MWT_Model.h MWT_Model.o MWT_Library.h MWT_Library.o MWT_DLL.h MWT_DLL.cc
-	$(CC) -static -static-libstdc++ $(FLAGS) $(TGT) -o $(OUTDIR)/MWT.dll MWT_DLL.cc MWT_Image.o MWT_Blob.o MWT_Model.o MWT_Library.o
+		mkdir -p lib; $(CC) -static -static-libstdc++ $(FLAGS) $(TGT) -o $(OUTDIR)/MWT.dll MWT_DLL.cc MWT_Image.o MWT_Blob.o MWT_Model.o MWT_Library.o
 endif
 
 test: all
@@ -85,4 +85,7 @@ clean:
 	rm -f test*.tiff
 	rm -f 20071226_105033/*
 	rm -f 20071212_130514/*
-	rm -fd 20071226_105033 20071212_130514
+	if [ -a 20071226_105033 ]; then rmdir 20071226_105033; fi
+	if [ -a 20071212_130514 ]; then rmdir 20071212_130514; fi
+	rm -f lib/MWT.dll
+	if [ -a lib ]; then rmdir lib; fi
