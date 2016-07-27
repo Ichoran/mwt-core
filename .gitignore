@@ -27,3 +27,13 @@
 *.exe
 *.out
 *.app
+
+# Editor backups
+*~
+
+# Test file backups
+
+2007*
+unit*
+*.tiff
+*.log
