@@ -93,7 +93,7 @@ public:
   void showFrame(int val,int wid) { identity=frame_n; showNumber(val,wid); }
   void showDancer(int val,int wid) { identity=dancer_n; showNumber(val,wid); }
   void showPerf(int val,int wid) { identity=perf_n; showNumber(val,wid); }
-  void showDate(struct tm& date);
+  void showNameDate(const char* trackerName, struct tm& date);
   void showText(const char *t);
   void numberToText();
   int toString(char *s,int n);
@@ -490,7 +490,7 @@ public:
 	
   // Output (mostly done during scanning--this is just for final cleanup)
   void enableOutput(Dancer& d,bool sitting=false);
-  bool prepareOutput(const char* path,const char *prefix,bool save_dance,bool save_sit,bool save_img,struct tm* date_to_use);
+  bool prepareOutput(const char* trackerName, const char* path,const char *prefix,bool save_dance,bool save_sit,bool save_img,struct tm* date_to_use);
   bool logErrors(char* err_fname);
   bool finishOutput();
   void imprint(Image* im,short borderI,int borderW,short maskI,int maskW,short dancerI,bool show_dancer,

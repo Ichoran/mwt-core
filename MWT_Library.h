@@ -87,6 +87,7 @@ public:
   ManagedList<Point> reference_objects;
   ManagedList<Point> working;
   
+  char* tracker_string;
   char* path_string;
   char* prefix_string;
   bool save_objects;
@@ -118,11 +119,11 @@ public:
   ManagedList<SummaryData> summary;
   
   TrackerEntry()  // Don't call this one--just here to keep compiler happy
-    : handle(NULL),path_string(NULL),prefix_string(NULL),eventstore(0),summary(0)
+    : handle(NULL),tracker_string(NULL),path_string(NULL),prefix_string(NULL),eventstore(0),summary(0)
   { }
   TrackerEntry(Listable<int> *new_handle,int buffer_size)  // Call this one using placement new 
     : performance(new_handle->data,buffer_size),handle(new_handle),reference_objects(16,false),working(16,false),
-      path_string(NULL),prefix_string(NULL),output_date(NULL),
+      tracker_string(NULL),path_string(NULL),prefix_string(NULL),output_date(NULL),
       update_frequency(1.0),eventstore(buffer_size,false) , summary(buffer_size,true)
   {
     image_info_known = false;
@@ -141,12 +142,14 @@ public:
   }
   ~TrackerEntry()
   {
+    if (tracker_string!=NULL) { delete[] tracker_string; tracker_string=NULL; }
     if (path_string!=NULL) { delete[] path_string; path_string=NULL; }
     if (prefix_string!=NULL) { delete[] prefix_string; prefix_string=NULL; }
     if (output_date!=NULL) { delete output_date; output_date=NULL; }
   }
+  void setTrackerName(const char *s) { if (tracker_string!=NULL) { delete[] tracker_string; } tracker_string = new char[strlen(s)+1]; strcpy(tracker_string, s); }
   void setPath(const char *s) { if (path_string!=NULL) { delete[] path_string; } path_string = new char[strlen(s)+1]; strcpy(path_string,s); }
-  void setPrefix(const char *s) { if (path_string!=NULL) { delete[] prefix_string; } prefix_string = new char[strlen(s)+1]; strcpy(prefix_string,s); }
+  void setPrefix(const char *s) { if (prefix_string!=NULL) { delete[] prefix_string; } prefix_string = new char[strlen(s)+1]; strcpy(prefix_string,s); }
   void setDate(int year,int month,int day,int hour,int minute,int second)
   {
     if (output_date!=NULL) delete output_date;

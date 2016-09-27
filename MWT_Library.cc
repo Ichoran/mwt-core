@@ -248,7 +248,7 @@ int TrackerLibrary::beginOutput(int handle)
   
   TrackerEntry* te = all_trackers[handle];
   if (!te->output_info_known) return 0;
-  bool good = te->performance.prepareOutput(te->path_string,te->prefix_string,te->save_objects,te->save_refs,te->save_images,te->output_date);
+  bool good = te->performance.prepareOutput(te->tracker_string,te->path_string,te->prefix_string,te->save_objects,te->save_refs,te->save_images,te->output_date);
   if (!good) return 0;
   te->output_started = true;
 

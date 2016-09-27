@@ -44,14 +44,16 @@ void FilenameComponent::showNumber(int val,int wid)
   sprintf(format,"%%0%dd",width);
 }
 
-void FilenameComponent::showDate(struct tm& date)
+void FilenameComponent::showNameDate(const char *trackerName, struct tm& date)
 {
   if (format!=NULL) delete[] format; 
   // Make sure the buffer is long enough if you change the format string!
-  format = new char[16];
-  snprintf(format,16,"%04d%02d%02d_%02d%02d%02d",date.tm_year,date.tm_mon+1,date.tm_mday,date.tm_hour,date.tm_min,date.tm_sec);
-  format[15] = 0;
-  width = strlen(format);  // Should always be 15, but just in case format string gets changed and counted wrong....
+  int nameLen = (trackerName == NULL) ? 0 : (strlen(trackerName) + 1);
+  format = new char[16 + nameLen];
+  if (nameLen > 0) snprintf(format, nameLen, "%s_", trackerName);
+  snprintf(format + nameLen, 16, "%04d%02d%02d_%02d%02d%02d",date.tm_year,date.tm_mon+1,date.tm_mday,date.tm_hour,date.tm_min,date.tm_sec);
+  format[nameLen+15] = 0;
+  width = strlen(format);  // Should always be nameLen+15, but just in case format string gets changed and counted wrong....
   identity=text;
 }
 
@@ -1582,7 +1584,7 @@ void Performance::enableOutput(Dancer& d,bool sitting)
 
 
 // Create output strings and paths for this performance
-bool Performance::prepareOutput(const char *path,const char *prefix,bool save_dance,bool save_sit,bool save_img,struct tm* date_to_use)
+bool Performance::prepareOutput(const char *trackerName, const char *path,const char *prefix,bool save_dance,bool save_sit,bool save_img,struct tm* date_to_use)
 {
   FilenameComponent* fc;
   if (path==NULL) path = ".";
@@ -1613,7 +1615,7 @@ bool Performance::prepareOutput(const char *path,const char *prefix,bool save_da
   ManagedList<FilenameComponent> dir_name(4,true);
   fc = new( dir_name.Append() ) FilenameComponent(); fc->showText(path);
   fc = new( dir_name.Append() ) FilenameComponent(); fc->showText(path_date_connector);
-  fc = new( dir_name.Append() ) FilenameComponent(); fc->showDate(*date);
+  fc = new( dir_name.Append() ) FilenameComponent(); fc->showNameDate(trackerName, *date);
   fc = new( dir_name.Append() ) FilenameComponent(); fc->showText("/");
   int dirnamelen = FilenameComponent::safeLength(dir_name);
   if (base_directory!=NULL) delete[] base_directory;
@@ -1823,7 +1825,7 @@ int test_mwt_blob_misc()
   date.tm_year=2007;
   
   mfc.Append( FilenameComponent() ); mfc.t().showText("Path/");
-  mfc.Append( FilenameComponent() ); mfc.t().showDate(date);
+  mfc.Append( FilenameComponent() ); mfc.t().showNameDate(NULL, date);
   mfc.Append( FilenameComponent() ); mfc.t().showText("/");
   mfc.Append( FilenameComponent() ); mfc.t().showText("perf");
   mfc.Append( FilenameComponent() ); mfc.t().showPerf(0,1);
@@ -1979,7 +1981,7 @@ int test_mwt_blob_performance()
   saved_refs.Append( (r1.near+r1.far)/2 );
   refs.Append( saved_refs.h() );
   
-  good = p->prepareOutput(".","test",true,true,true,&date);
+  good = p->prepareOutput(NULL, ".","test",true,true,true,&date);
   if (!good) return 1;
   char fname[1024];
   FilenameComponent::toString(*p->dance_fname,fname,1024);
