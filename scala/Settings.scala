@@ -5,7 +5,7 @@ import kse.jsonal.JsonConverters._
 import kse.flow._
 import kse.maths._
 
-object ImplicitJson {
+object ImplicitMwtSettingsJson {
   implicit val implicitMwtSettingsSegmentation: FromJson[Segmentation] = Segmentation
   implicit val implicitMwtSettingsOutput: FromJson[Output] = Output
   implicit val implicitMwtSettingsMask: FromJson[Mask] = Mask
@@ -26,7 +26,7 @@ case class Segmentation(
   private[this] def sigfig(x: Double) = math.rint(x*1e3) / 1e3
   def json = Json ~ 
     ("dark", dark) ~ ("binning", binning max 1) ~
-    ("contrast", sigfig(contrast)) ~ ("contrast-hysteresis", sigfig(contrastHyst*1e3)) ~
+    ("contrast", sigfig(contrast)) ~ ("contrast-hysteresis", sigfig(contrastHyst)) ~
     ("size-min", sizeMin max 1) ~ ("size-max", sizeMax max sizeMin max 1) ~ ("size-hysteresis", sigfig(sizeHyst)) ~
     ("alpha", alpha.clip(1, 15)) ~ ("bands", bands max 1) ~ ("border", border max 0) ~
     ("divisive", divisive) ~
@@ -34,7 +34,7 @@ case class Segmentation(
 }
 object Segmentation extends FromJson[Segmentation] {
   private[this] def sigfig(x: Double) = math.rint(x*1e3) / 1e3
-  val default = new Segmentation(true, 1, 10, 0.4f, 50, 2000, 0.1f, 5, 10, 20, false)
+  val default = new Segmentation(true, 1, 0.1f, 0.4f, 50, 2000, 0.1f, 5, 10, 20, false)
   def parse(j: Json): Either[JastError, Segmentation] = j match {
     case o: Json.Obj =>
       val dark = if (o contains "dark")                o("dark").to[Boolean].OUT                          else default.dark
@@ -187,7 +187,7 @@ object References extends FromJson[References] {
   val default = new References(0, 16000, new Array[Coordinate](0))
   def parse(j: Json): Either[JastError, References] = j match {
     case o: Json.Obj =>
-      import ImplicitJson.implicitMwtSettingsCoordinate
+      import ImplicitMwtSettingsJson.implicitMwtSettingsCoordinate
       val lowi = if (o contains "low-intensity")  o("low-intensity").to[Double].OUT          else default.lowIntensity
       val hiii = if (o contains "high-intensity") o("high-intensity").to[Double].OUT         else default.highIntensity
       val coor = if (o contains "coordinates")    o("coordinates").to[Array[Coordinate]].OUT else default.coordinates
@@ -218,7 +218,7 @@ object CustomLabView extends FromJson[CustomLabView] {
 
 case class Settings(
   timestamp: Option[Either[java.time.LocalDateTime, java.time.Instant]],
-  segmentation: Segmentation, output: Output,
+  software: String, segmentation: Segmentation, output: Output,
   masks: Array[Mask], stimuli: Array[Stimulus], references: References,
   custom: Option[Either[Json, CustomLabView]]
 ) extends AsJson {
@@ -233,7 +233,7 @@ case class Settings(
   def json = (
     Json 
     ~? ("timestamp", jstamp) 
-    ~ ("segmentation", segmentation) ~ ("output", output)
+    ~ ("software", software) ~ ("segmentation", segmentation) ~ ("output", output)
     ~? ("masks", if (masks.length > 0) Some(Json(masks)) else None)
     ~? ("stimuli", if (stimuli.length > 0) Some(Json(stimuli)) else None)
     ~? ("references", if (references.coordinates.length > 0) Some(references) else None)
@@ -243,11 +243,12 @@ case class Settings(
   override def toString = PrettyJson(json)
 }
 object Settings extends FromJson[Settings] {
-  val default = new Settings(None, Segmentation.default, Output.default, new Array[Mask](0), new Array[Stimulus](0), References.default, None)
+  val default = new Settings(None, "", Segmentation.default, Output.default, new Array[Mask](0), new Array[Stimulus](0), References.default, None)
   def parse(j: Json): Either[JastError, Settings] = j match {
     case o: Json.Obj =>
-      import ImplicitJson._
+      import ImplicitMwtSettingsJson._
       val time = if (o contains "timestamp")    o("timestamp").to[Either[java.time.LocalDateTime, java.time.Instant]].OUT else null
+      val soft = if (o contains "software")     o("software").to[String].OUT                                              else default.software
       val segm = if (o contains "segmentation") o("segmentation").to[Segmentation].OUT                                    else default.segmentation
       val outp = if (o contains "output")       o("output").to[Output].OUT                                                else default.output
       val mask = if (o contains "masks")        o("masks").to[Array[Mask]].OUT                                            else default.masks
@@ -257,7 +258,7 @@ object Settings extends FromJson[Settings] {
         case j: Json => Some(j.to[CustomLabView] match { case Right(clv) => Right(clv); case _=> Left(j) })
         case _       => None
       }
-      Right(new Settings(Option(time), segm, outp, mask, stim, refs, cust))
+      Right(new Settings(Option(time), soft, segm, outp, mask, stim, refs, cust))
     case Json.Null   => Right(default)
     case _           => Left(JastError("Expected JSON object for MWT settings but did not find one"))
   }

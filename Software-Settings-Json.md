@@ -17,9 +17,11 @@ sensible default should be used.
 
 All numbers should be finite.
 
-The top-level struture is a JSON object with up to seven subcategories:
+The top-level struture is a JSON object with up to eight subcategories:
 
-0. `"timestamp"` - This key is associated with a string containing an ISO-8601 timestamp.  Only local and UTC timezones are supported.
+1. `"timestamp"` - This key is associated with a string containing an ISO-8601 timestamp.  Only local and UTC timezones are supported.
+
+1. `"software"` - This key is associated with a string value that specifies the version of the software that created the file.
 
 1. `"segmentation"` - This key is associated with a JSON object that lists
 the image segmentation parameters that form the bulk of the settings in MWT-core.
@@ -38,8 +40,6 @@ an array of JSON objects that specify what stimuli are expected.
 
 5. `"custom"` - Any front-end specific values go under this key.
 
-In addition, the `"software"` key may be associated with an identifying string that
-specifies the software that took the data, e.g. `"MWT LabView 1.5.0-M2"`
 
 ## The `segmentation` object
 
@@ -136,6 +136,8 @@ MWT-LabView uses two fields in an object here.
 
 ```
 {
+  "timestamp": "2016-12-19T14:42:30",
+  "software": "Rex Kerr hand-generated",
   "segmentation": {
     "dark": true,
     "binning": 1,
@@ -173,7 +175,7 @@ MWT-LabView uses two fields in an object here.
       "count": 13,
       "high": 0.05,
       "pulses": 1,
-      "shape": "u"
+      "shape": "u",
       "custom": "A=120.0500;60.0000;0.050000;4.950000;0.050000;0.000001u"
     }
   ],
@@ -181,8 +183,8 @@ MWT-LabView uses two fields in an object here.
     "low-intensity": 0,
     "high-intensity": 16000,
     "coordinates": [
-      [1235, 1441],
-      [551, 1153]
+      { "x": 1235, "y": 1441 },
+      { "x": 551, "y": 1153 }
     ]
   },
   "custom": {
