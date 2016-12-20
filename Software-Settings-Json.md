@@ -130,8 +130,8 @@ Reference objects are specified in an object that consists primarily of an array
 MWT-LabView uses five fields in an object here.
 
 1. `"path"` - A string that represents the path where the data was saved.  The settings file is usually saved to the same location (but of course can be moved thereafter).
-2. `"camera-name"` - A string that identifies the camera in use.
-3. `"warmup-frames"` - A positive integer specifying how many frames to warm up on before we start tracking, to establish a background.
+2. `"camera"` - A string that identifies the camera in use.
+3. `"warmup"` - A positive integer specifying how many frames to warm up on before we start tracking, to establish a background.
 4. `"bit-depth"` - Either a positive integer, which is the bit depth, or 0, meaning that the bit depth is read from the camera
 5. `"auto-start"` - A number indicating the time in seconds after which to automatically begin recording
 
@@ -192,7 +192,7 @@ MWT-LabView uses five fields in an object here.
   },
   "custom": {
     "path": "rk/test",
-    "camera-name": "cam0",
+    "camera": "cam0",
     "warmup": 5,
     "bit-depth": 0,
     "auto-start": 2
