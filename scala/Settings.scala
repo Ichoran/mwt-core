@@ -198,21 +198,24 @@ object References extends FromJson[References] {
   }
 }
 
-case class CustomLabView(path: String, bitDepth: Int, autoStart: Double) extends AsJson { 
+case class CustomLabView(path: String, camera: String, warmup: Int, bitDepth: Int, autoStart: Double) extends AsJson { 
   private[this] def sigfig(x: Double) = math.rint(x*1e3) / 1e3
-  def json = Json ~ ("path", path) ~ ("bit-depth", bitDepth) ~ ("auto-start", sigfig(autoStart)) ~ Json
+  def json = Json ~ ("path", path) ~  ("camera", camera) ~ ("warmup", warmup) ~ ("bit-depth", bitDepth) ~ ("auto-start", sigfig(autoStart)) ~ Json
 }
 object CustomLabView extends FromJson[CustomLabView] {
   private[this] def sigfig(x: Double) = math.rint(x*1e3) / 1e3
-  val default = new CustomLabView(".", 0, 0)
+  val default = new CustomLabView(".", "", 1, 0, 0)
   def parse(j: Json): Either[JastError, CustomLabView] = j match {
     case o: Json.Obj =>
       val path = if (o contains "path")       o("path").to[String].OUT       else default.path
+      val camr = if (o contains "camera")     o("camera").to[String].OUT     else default.camera
+      val warm = if (o contains "warmup")     o("warmup").to[Double].OUT     else default.warmup
       val bdep = if (o contains "bit-depth")  o("bit-depth").to[Double].OUT  else default.bitDepth
       val auts = if (o contains "auto-start") o("auto-start").to[Double].OUT else default.autoStart
+      if (!warm.finite || warm < 0 || warm.toInt != warm) return Left(JastError(f"Warmup must be a positive integer, was $warm"))
       if (!bdep.finite || bdep.toInt != bdep) return Left(JastError(f"Bit depth must be a non-negative integer, was $bdep"))
       if (!auts.finite || auts < 0) return Left(JastError(f"Auto-start time must be finite and non-negative, was $auts"))
-      Right(new CustomLabView(path, bdep.toInt, sigfig(auts)))
+      Right(new CustomLabView(path, camr, warm.toInt, bdep.toInt, sigfig(auts)))
     case _           => Left(JastError("Expected JSON object for Custom LabView parameters but did not get one"))
   }
 }
