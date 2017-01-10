@@ -2714,6 +2714,13 @@ void Image::println() const
   printf("\n");
 }
 
+/* static */
+void Image::copy8to16(const unsigned char *in, int inStride, unsigned short *out, int outStride, int nx, int ny) {
+  for (int j = 0; j < ny; j++)
+    for (int i = 0; i < nx; i++)
+      out[j*inStride + i] = in[j*inStride + i];
+}
+
 int test_mwt_image_mask()
 {
   Ellipse ellip( Point(1,2) , 3 );

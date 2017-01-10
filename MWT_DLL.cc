@@ -17,6 +17,14 @@
 TrackerLibrary the_library;
 
 
+/****************************************************************
+             Utility methods Not Attached to a Handle
+****************************************************************/
+
+void MWT_widen_image_8_to_16(char* in, int inStride, short* out, int outStride, int nx, int ny) {
+  Image::copy8to16(in, inStride, out, outStride, nx, ny);
+}
+
 
 /****************************************************************
       Procedural Wrappers to Global TrackerLibrary Variable

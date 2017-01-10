@@ -10,7 +10,7 @@
 #define MWT_DLL
 
 // NOTE: Always update me!!!
-#define REVISION 975
+#define REVISION 976
 
 
 #include "MWT_Library.h"
@@ -36,6 +36,8 @@ typedef TD1 **TD1Hdl;
 
 extern "C" {
 int MWT_reportRevisionNumber() { return REVISION; }
+
+void MWT_widen_image_8_to_16(char* in, int inStride, short* out, int outStride, int nx, int ny);
 
 int MWT_getNewHandle();
 int MWT_killHandle(int handle);

@@ -610,6 +610,9 @@ public:
   int writeTiff(FILE *f);
   int writeTiff(const char *fname);
   void println() const;
+
+  // General image utilities
+  static void copy8to16(const unsigned char *in, int inStride, unsigned short *out, int outStride, int nx, int ny);
 };
 
 

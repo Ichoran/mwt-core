@@ -115,6 +115,8 @@ Stimuli are specified in an array.  Each entry is a JSON object with the followi
 13. `"more"` - A nested stimulus object that specifies what happens immediately after the first stimulus train is done
 14. `"custom"` - A JSON value that contains any custom settings to the stimulator.  For Ticklish, this is the command-string sent to the device to set up the stimulus.
 
+Note that LabView uses an empty string for the channel to indicate that it has saved some stimulus parameters but does not want to actually deliver the stimulus this time.
+
 ## The `"reference"` object
 
 Reference objects are specified in an object that consists primarily of an array of x,y coordinates.  The object contains three fields:
@@ -134,6 +136,7 @@ MWT-LabView uses five fields in an object here.
 3. `"warmup"` - A positive integer specifying how many frames to warm up on before we start tracking, to establish a background.
 4. `"bit-depth"` - Either a positive integer, which is the bit depth, or 0, meaning that the bit depth is read from the camera
 5. `"auto-start"` - A number indicating the time in seconds after which to automatically begin recording
+6. `"aggregate"` - Indicates whether MWT-LabView should try to aggregate the output or not.
 
 ## An example
 
@@ -195,7 +198,8 @@ MWT-LabView uses five fields in an object here.
     "camera": "cam0",
     "warmup": 5,
     "bit-depth": 0,
-    "auto-start": 2
+    "auto-start": 2,
+    "aggregate": true
   }
 }
 ```
