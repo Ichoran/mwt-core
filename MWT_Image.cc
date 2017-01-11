@@ -2669,11 +2669,51 @@ int Image::writeTiff(const char *fname)
   return i;
 }
 
+void Image::println() const
+{
+  printf("%d,%d %d,%d\n",bounds.near.x,bounds.near.y,bounds.far.x,bounds.far.y);
+  Rectangle b = getBounds();
+  printf("%d,%d %d,%d\n",b.near.x,b.near.y,b.far.x,b.far.y);
+  for (int i=b.near.x;i<=b.far.x;i++)
+  {
+    for (int j=b.near.y;j<=b.far.y;j++)
+    {
+      printf("%02x",get(i,j)&0xFF /*(char)(get(i,j)+' ')*/);
+    }
+    printf("\n");
+  }
+  printf("\n");
+}
+
+/* static */
+void Image::copy8to16(const unsigned char *in, int inStride, unsigned short *out, int outStride, int nx, int ny) {
+  for (int j = 0; j < ny; j++)
+    for (int i = 0; i < nx; i++)
+      out[j*outStride + i] = in[j*inStride + i];
+}
 
 
 /****************************************************************
                     Unit Test-Style Functions
 ****************************************************************/
+
+int test_static_image_copy() {
+  unsigned char *in = (unsigned char*)malloc(36);
+  unsigned short *out = (unsigned short*)malloc(20*2);
+  for (int ii = 0; ii < 36; ii++) in[ii] = ii;
+  for (int oi = 0; oi < 20; oi++) out[oi] = 0;
+  Image::copy8to16(in, 6, out, 4, 3, 4);
+  for (int y = 0; y < 5; y++) {
+    for (int x = 0; x < 4; x++) {
+      int ko = 4*y + x;
+      int ki = 6*y + x;
+      if (y >= 4) { if (out[ko] != 0) return 1; }
+      else if (x >= 3) { if (out[ko] != 0) return 2; }
+      else if (out[ko] != in[ki]) return 3;
+    }
+  }
+  return 0;
+}
 
 int test_mwt_image_strip()
 {
@@ -2696,29 +2736,6 @@ int test_mwt_image_strip()
   if (!(sa[2]<sa[0] && sa[0]<sa[1] && sa[1]<sa[3])) return 7;
   
   return 0;
-}
-
-void Image::println() const
-{
-  printf("%d,%d %d,%d\n",bounds.near.x,bounds.near.y,bounds.far.x,bounds.far.y);
-  Rectangle b = getBounds();
-  printf("%d,%d %d,%d\n",b.near.x,b.near.y,b.far.x,b.far.y);
-  for (int i=b.near.x;i<=b.far.x;i++)
-  {
-    for (int j=b.near.y;j<=b.far.y;j++)
-    {
-      printf("%02x",get(i,j)&0xFF /*(char)(get(i,j)+' ')*/);
-    }
-    printf("\n");
-  }
-  printf("\n");
-}
-
-/* static */
-void Image::copy8to16(const unsigned char *in, int inStride, unsigned short *out, int outStride, int nx, int ny) {
-  for (int j = 0; j < ny; j++)
-    for (int i = 0; i < nx; i++)
-      out[j*inStride + i] = in[j*inStride + i];
 }
 
 int test_mwt_image_mask()
@@ -3053,7 +3070,12 @@ int test_mwt_image_image()
 
 int test_mwt_image()
 {
-  return test_mwt_image_strip() + 100*test_mwt_image_mask() + 10000*test_mwt_image_contour() + 1000000*test_mwt_image_image();
+  return 
+    test_mwt_image_strip() + 
+    100*test_mwt_image_mask() + 
+    10000*test_mwt_image_contour() + 
+    1000000*test_mwt_image_image() +
+    100000000*test_static_image_copy();
 }
 
 #ifdef UNIT_TEST_OWNER
