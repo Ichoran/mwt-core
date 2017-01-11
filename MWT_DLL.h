@@ -37,7 +37,7 @@ typedef TD1 **TD1Hdl;
 extern "C" {
 int MWT_reportRevisionNumber() { return REVISION; }
 
-void MWT_widen_image_8_to_16(char* in, int inStride, short* out, int outStride, int nx, int ny);
+void MWT_widen_image_8_to_16(const unsigned char* in, int inStride, unsigned short* out, int outStride, int nx, int ny);
 
 int MWT_getNewHandle();
 int MWT_killHandle(int handle);
