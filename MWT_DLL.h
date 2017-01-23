@@ -10,7 +10,7 @@
 #define MWT_DLL
 
 // NOTE: Always update me!!!
-#define REVISION 976
+#define REVISION 977
 
 
 #include "MWT_Library.h"
@@ -23,11 +23,11 @@ typedef struct {
 
 // The 2d array handle structure for LabView
 typedef struct {
-	// The dimensions of the array
-	// Index 0 == x coordinate (coarse, x values advance lines)
-	// Index 1 == y coordinate (fine, y values are adjacent)
-	int dimSizes[2];
-	// The actual array, this is a 2d array enfolded in to a 1d array.
+  // The dimensions of the array
+  // Index 0 == x coordinate (coarse, x values advance lines)
+  // Index 1 == y coordinate (fine, y values are adjacent)
+  int dimSizes[2];
+  // The actual array, this is a 2d array enfolded in to a 1d array.
   short elt[1];
 } TD2;
 
@@ -58,7 +58,9 @@ int MWT_addEllipse(int handle,int centerx,int centery,int radiusx,int radiusy);
 int MWT_cutRectangle(int handle,int left,int right,int top,int bottom);
 int MWT_cutEllipse(int handle,int centerx,int centery,int radiusx,int radiusy);
 
-int MWT_showROI(int handle,TD2Hdl im, int bin=1);  
+int MWT_showROI(int handle,TD2Hdl im, int bin=1);
+int MWT_showROI_16(int handle, short* im, int nx, int ny, int stride, int bin = 1);
+int MWT_showROI_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1);
 
 int MWT_setDancerBorderSize(int handle,int border);
 int MWT_setRefIntensityThreshold(int handle,int intensity_low,int intensity_high);
@@ -70,7 +72,11 @@ int MWT_setOutputType( int handle, int type);
 int MWT_setUpdateBandNumber(int handle,int num_bands);
 
 int MWT_scanRefs(int handle, TD2Hdl im, int bin=1);
+int MWT_scanRefs_16(int handle, short* im, int nx, int ny, int stride, int bin = 1);
+int MWT_scanRefs_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1);
 int MWT_showRefs(int handle, TD2Hdl im, int bin=1);
+int MWT_showRefs_16(int handle, short* im, int nx, int ny, int stride, int bin = 1);
+int Mwt_showRefs_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1);
 
 int MWT_enableSkeletonization(int handle, bool enable); 
 int MWT_enableOutlining(int handle, bool enable);
@@ -81,27 +87,45 @@ int MWT_setObjectSizeThresholds(int handle, int small_size,int small_good_size, 
 int MWT_setObjectPersistenceThreshold(int handle,int frames);
 int MWT_setAdaptationRate(int handle,int alpha);
 
-int MWT_scan(int handle,TD2Hdl im, int bin=1);  
+int MWT_scan(int handle,TD2Hdl im, int bin=1);
+int MWT_scan_16(int handle, short* im, int nx, int ny, int stride, int bin = 1);
+int MWT_scan_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1);
 int MWT_showScan(int handle,TD2Hdl im, int bin=1); 
+int MWT_showScan_16(int handle, short* im, int nx, int ny, int stride, int bin = 1);
+int MWT_showScan_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1);
 
 int MWT_setDivisionImageCorrectionAlgorithm( int handle );
 int MWT_setSubtractionImageCorrectionAlgorithm( int handle );
 int MWT_reportImageCorrectionAlgorithm(int handle);
 float MWT_generateDivisionCorrection(int handle, TD1Hdl coords);
-int MWT_loadImage(int handle,TD2Hdl im,float time, int bin=1); 
-int MWT_prepareImagePieces( int handle, float time);
-int MWT_getNextPieceCoords( int handle, TD1Hdl coords); 
-int MWT_loadThisImagePiece( int handle, TD2Hdl im, int x, int y, int bin=1);
+int MWT_loadImage(int handle, TD2Hdl im, float time, int bin = 1); 
+int MWT_loadImage_16(int handle, short* im, int nx, int ny, int stride, int bin = 1);
+int MWT_loadImage_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1);
+int MWT_prepareImagePieces(int handle, float time);
+int MWT_getNextPieceCoords(int handle, TD1Hdl coords);
+int MWT_loadThisImagePiece(int handle, TD2Hdl im, int x, int y, int bin=1);
+int MWT_loadThisImagePiece_16(int handle, short* im, int nx, int ny, int stride, int x, int y, int bin = 1);
+int MWT_loadThisImagePiece_8(int handle, unsigned char* im, int nx, int ny, int stride, int x, int y, int bin = 1);
 int MWT_showLoaded(int handle, TD2Hdl im, int bin=1);
+int MWT_showLoaded_16(int handle, short* im, int nx, int ny, int stride, int bin = 1);
+int MWT_showLoaded_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1);
 int MWT_markEvent(int handle, int event_number);
 int MWT_processImage(int handle);
 int MWT_checkErrors(int handle);
 int MWT_complete(int handle);
   
-int MWT_resizeRescale( int handle, TD2Hdl src, TD2Hdl dst, int dest_width, int dest_height);
-int MWT_resizeRescaleMemory( int handle, TD2Hdl dest, int dest_width, int dest_height);
-int MWT_resizeRescaleFixed( int handle, TD2Hdl dst, int dest_width, int dest_height);
-int MWT_showResults(int handle, TD2Hdl im, int bin=1);
+int MWT_resizeRescale(int handle, TD2Hdl src, TD2Hdl dst, int dest_width, int dest_height);
+int MWT_resizeRescale_16(int handle, short* src, int snx, int sny, int sstride, short* dst, int dnx, int dny, int dstride, int dest_width, int dest_height);
+int MWT_resizeRescale_8(int handle, unsigned char* src, int snx, int sny, int sstride, unsigned char* dst, int dnx, int dny, int dstride, int dest_width, int dest_height);
+int MWT_resizeRescaleMemory(int handle, TD2Hdl dest, int dest_width, int dest_height);
+int MWT_resizeRescaleMemory_16(int handle, short* dst, int dnx, int dny, int dstride, int dest_width, int dest_height);
+int MWT_resizeRescaleMemory_8(int handle, unsigned char* dst, int dnx, int dny, int dstride, int dest_width, int dest_height);
+int MWT_resizeRescaleFixed(int handle, TD2Hdl dst, int dest_width, int dest_height);
+int MWT_resizeRescaleFixed_16(int handle, short* dst, int dnx, int dny, int dstride, int dest_width, int dest_height);
+int MWT_resizeRescaleFixed_8(int handle, unsigned char* dst, int dnx, int dny, int dstride, int dest_width, int dest_height);
+int MWT_showResults(int handle, TD2Hdl im, int bin = 1);
+int MWT_showResults_16(int handle, short* dst, int nx, int ny, int stride, int bin = 1);
+int MWT_showResults_8(int handle, unsigned char* dst, int nx, int ny, int stride, int bin = 1);
 
 int MWT_reportNumber(int handle);
 int MWT_reportNumberPersisting(int handle);

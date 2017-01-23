@@ -1,4 +1,4 @@
-/* Copyright (C) 2007 - 2010 Howard Hughes Medical Institute
+TOD/* Copyright (C) 2007 - 2010 Howard Hughes Medical Institute
  * Copyright (C) 2007 - 2010 Rex A. Kerr, Nicholas A. Swierczek
  *
  * This file is a part of the Multi-Worm Tracker and is distributed under the
@@ -130,6 +130,54 @@ int MWT_showROI(int handle, TD2Hdl im, int bin)
   return the_library.showROI(handle,img);
 }
 
+int MWT_showROI_16(int handle, short* im, int nx, int ny, int stride, int bin = 1) {
+  if (handle < 1 || im == NULL) return -3;
+  else if (nx <= 0 || ny <= 0 || stride <= 0) return -4;
+
+  if (stride == ny) {
+    Image img(im, Point(nx, ny), false);
+    img.bin = bin;
+    img.depth = the_library.getBitDepth(handle);
+    return the_library.showROI(handle, img);
+  }
+  else {
+    Image* imp = the_library.cachedImageOfSize(handle, nx, ny);
+    imp->bin = bin;
+    imp->depth = the_library.getBitDepth(handle);
+    for (int x = 0; x < nx; x++) memcpy(imp->pixels + x*imp->size.y, im + x*stride, ny*sizeof(short));
+    return the_library.showROI(handle, *imp);
+  }
+}
+
+int MWT_showROI_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1) {
+  if (handle < 1 || im == NULL) return -3;
+  else if (nx <= 0 || ny <= 0 || stride <= 0) return -4;
+
+  Image* imp = the_library.cachedImageOfSize(handle, nx, ny);
+  imp->bin = bin;
+  imp->depth = the_library.getBitDepth(handle);
+  int result = -1;
+  if (imp.depth == 8) {
+    for (int x = 0; x < nx; x++) for (int y = 0; y < ny; y++) imp->raw(x,y) = (short)im[y + x*stride];
+    result = the_library.showROI(handle, *imp);
+    for (int x = 0; x < nx; x++) for (int y = 0; y < ny; y++) im[y + x*stride] = (unsigned char)imp->raw(x,y);
+  }
+  else if (imp->depth > 8) {
+    int left = imp->depth - 8;
+    for (int x = 0; x < nx; x++) for (int y = 0; y < ny; y++) imp->raw(x,y) = ((short)im[y + x*stride]) << left;
+    result = the_library.showROI(handle, *imp);
+    for (int x = 0; x < nx; x++) for (int y = 0; y < ny; y++) im[y + x*stride] = (unsigned char)(imp->raw(x,y) >> left);
+  }
+  else {
+    val right = imp->depth - 8;
+    for (int x = 0; x < nx; x++) for (int y = 0; y < ny; y++) imp->raw(x,y) = ((short)im[y + x*stride]) >> right;
+    result = the_library.showROI(handle, *imp);
+    for (int x = 0; x < nx; x++) for (int y = 0; y < ny; y++) im[y + x*stride] = (unsigned char)(imp->raw(x,y) << right);
+  }
+  return result;
+}
+
+
 int MWT_setDancerBorderSize(int handle,int border)
 {
   if( handle < 1 || border < 1 ) return -3;
@@ -197,6 +245,15 @@ int MWT_scanRefs(int handle, TD2Hdl im, int bin)
   return the_library.scanRefs(handle,img);
 }
 
+int MWT_scanRefs_16(int handle, short* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+int MWT_scanRefs_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+
 int MWT_showRefs(int handle, TD2Hdl im, int bin)
 {
   if( handle < 1 || im == NULL ) return -3;
@@ -207,6 +264,15 @@ int MWT_showRefs(int handle, TD2Hdl im, int bin)
   img.depth = the_library.getBitDepth(handle);
   return the_library.showRefs(handle,img,true);
 }
+
+int MWT_showRefs_16(int handle, short* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+int Mwt_showRefs_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
 
 int MWT_enableSkeletonization( int handle, bool enable ) 
 {
@@ -253,6 +319,7 @@ int MWT_setAdaptationRate(int handle,int alpha)
   return the_library.setAdaptationRate(handle,alpha);
 }
 
+
 int MWT_scan(int handle, TD2Hdl im, int bin)
 {
   if( handle < 1 || im == NULL ) return -3;
@@ -264,6 +331,15 @@ int MWT_scan(int handle, TD2Hdl im, int bin)
   return the_library.scanObjects(handle,img);
 }
 
+int MWT_scan_16(int handle, short* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+int MWT_scan_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+
 int MWT_showScan(int handle, TD2Hdl im, int bin)
 {
   if( handle < 1 || im == NULL ) return -3;
@@ -274,6 +350,14 @@ int MWT_showScan(int handle, TD2Hdl im, int bin)
   img.depth = the_library.getBitDepth(handle);
   return the_library.showObjects(handle,img);
 }
+int MWT_showScan_16(int handle, short* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+int MWT_showScan_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
 
 float MWT_generateDivisionCorrection( int handle, TD1Hdl coords ) 
 {
@@ -325,6 +409,7 @@ int MWT_reportImageCorrectionAlgorithm(int handle)
 	return the_library.reportImageCorrectionAlgorithm(handle);
 }
 
+
 int MWT_loadImage(int handle,TD2Hdl im,float time, int bin)
 {
   if( handle < 1 || im == NULL || time < 0) return -3;
@@ -335,6 +420,15 @@ int MWT_loadImage(int handle,TD2Hdl im,float time, int bin)
   img.depth = the_library.getBitDepth(handle);
 	return the_library.loadImageAsPieces(handle,img,time);
 }
+
+int MWT_loadImage_16(int handle, short* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+int MWT_loadImage_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
 
 int MWT_prepareImagePieces( int handle, float time ) 
 {
@@ -359,6 +453,7 @@ int MWT_getNextPieceCoords( int handle, TD1Hdl coords )
   return ret;
 }
 
+
 int MWT_loadThisImagePiece( int handle, TD2Hdl im, int x, int y, int bin ) {
 	if( handle < 1 || im == NULL )	return -3;
   else if( (*im)->dimSizes[0] < 1 || (*im)->dimSizes[1] < 1 )	return -4;
@@ -369,6 +464,15 @@ int MWT_loadThisImagePiece( int handle, TD2Hdl im, int x, int y, int bin ) {
 	
   return the_library.loadThisImagePiece( handle, img );
 }
+
+int MWT_loadThisImagePiece_16(int handle, short* im, int nx, int ny, int stride, int x, int y, int bin = 1) {
+  return -1; // TODO
+}
+
+int MWT_loadThisImagePiece_8(int handle, unsigned char* im, int nx, int ny, int stride, int x, int y, int bin = 1) {
+  return -1; // TODO
+}
+
 
 int MWT_markEvent(int handle, int event_number) 
 {
@@ -384,6 +488,7 @@ int MWT_processImage(int handle)
 	return the_library.processImage(handle);
 }
 
+
 int MWT_showLoaded(int handle, TD2Hdl im, int bin) 
 {
   if( handle < 1 || im == NULL ) return -3;
@@ -395,6 +500,15 @@ int MWT_showLoaded(int handle, TD2Hdl im, int bin)
   return the_library.showLoaded(handle,img);
 }
 
+int MWT_showLoaded_16(int handle, short* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+int MWT_showLoaded_8(int handle, unsigned char* im, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+
 // Should be called when display is enabled and it is set to "Fixed."
 int MWT_showResults(int handle,TD2Hdl im, int bin)
 {
@@ -404,8 +518,18 @@ int MWT_showResults(int handle,TD2Hdl im, int bin)
   Image img((*im)->elt,Point((*im)->dimSizes[0],(*im)->dimSizes[1]),false);
   img.bin = bin;
   img.depth = the_library.getBitDepth(handle);
-  return the_library.showResults(handle,img);
+  return the_library.showResults(handle,img);int MWT_resizeRescaleMemory_16(int handle, short* dst, int dnx, int dny, int dstride, int dest_width, int dest_height);
+int MWT_resizeRescaleMemory_8(int handle, unsigned char* dst, int dnx, int dny, int dstride, int dest_width, int dest_height);
+
 }
+int MWT_showResults_16(int handle, short* dst, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
+int MWT_showResults_8(int handle, unsigned char* dst, int nx, int ny, int stride, int bin = 1) {
+  return -1; // TODO
+}
+
 
 int MWT_resizeRescale( int handle, TD2Hdl s, TD2Hdl dst, int dest_width, int dest_height) 
 {
@@ -421,6 +545,15 @@ int MWT_resizeRescale( int handle, TD2Hdl s, TD2Hdl dst, int dest_width, int des
   return  the_library.resizeRescale(handle,src,dest,rect);
 }
 
+int MWT_resizeRescale_16(int handle, short* src, int snx, int sny, int sstride, short* dst, int dnx, int dny, int dstride, int dest_width, int dest_height) {
+  return -1; // TODO
+}
+
+int MWT_resizeRescale_8(int handle, unsigned char* src, int snx, int sny, int sstride, unsigned char* dst, int dnx, int dny, int dstride, int dest_width, int dest_height) {
+  return -1; // TODO
+}
+
+
 int MWT_resizeRescaleMemory( int handle, TD2Hdl dst, int dest_width, int dest_height) 
 {
   if( handle < 1 || dst == NULL ) return -3;
@@ -433,6 +566,15 @@ int MWT_resizeRescaleMemory( int handle, TD2Hdl dst, int dest_width, int dest_he
   return  the_library.resizeRescaleMemory(handle,dest,rect);
 }
 
+int MWT_resizeRescaleMemory_16(int handle, short* dst, int dnx, int dny, int dstride, int dest_width, int dest_height) {
+  return -1; // TODO
+}
+
+int MWT_resizeRescaleMemory_8(int handle, unsigned char* dst, int dnx, int dny, int dstride, int dest_width, int dest_height) {
+  return -1; // TODO
+}
+
+
 int MWT_resizeRescaleFixed( int handle, TD2Hdl dst, int dest_width, int dest_height) 
 {
   if( handle < 1 || dst == NULL ) return -3;
@@ -444,6 +586,15 @@ int MWT_resizeRescaleFixed( int handle, TD2Hdl dst, int dest_width, int dest_hei
   Rectangle rect( Point(0,0) , Point(dest_width-1,dest_height-1));
   return  the_library.resizeRescaleFixed(handle,dest,rect);
 }
+
+int MWT_resizeRescaleFixed_16(int handle, short* dst, int dnx, int dny, int dstride, int dest_width, int dest_height) {
+  return -1; // TODO
+}
+
+int MWT_resizeRescaleFixed_8(int handle, unsigned char* dst, int dnx, int dny, int dstride, int dest_width, int dest_height) {
+  return -1; // TODO
+}
+
 
 
 int MWT_checkErrors(int handle)
