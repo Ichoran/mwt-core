@@ -119,6 +119,23 @@ int MWT_cutEllipse(int handle,int centerx,int centery,int radiusx,int radiusy)
   return the_library.cutEllipse(handle,centerx,centery,radiusx,radiusy);
 }
 
+Image MWT_access_image_16_direct(int handle, short* im, int nx, int ny, int bin) {
+  Image img(im, Point(nx, ny), false);
+  img->bin = bin;
+  img->depth = the_library.getBitDepth(handle);
+  return img;
+}
+
+Image* MWT_access_image_16_copy(int handle, short* im, int nx, int ny, int stride, int bin) {
+  Image* imp = the_library.cachedImageOfSize(handle, nx, ny);
+  imp->bin = bin;
+  imp->depth = the_library.getBitDepth(handle);
+  for (int x = 0; x < nx; x++) memcpy(imp->pixels + x*imp->size.y, im + x*stride, ny*sizeof(short));
+  return imp;
+}
+
+void MWT_access_image_16_uncopy()...
+
 int MWT_showROI(int handle, TD2Hdl im, int bin)
 {
   if( handle < 1 || im == NULL ) return -3;
@@ -134,18 +151,12 @@ int MWT_showROI_16(int handle, short* im, int nx, int ny, int stride, int bin = 
   if (handle < 1 || im == NULL) return -3;
   else if (nx <= 0 || ny <= 0 || stride <= 0) return -4;
 
-  if (stride == ny) {
-    Image img(im, Point(nx, ny), false);
-    img.bin = bin;
-    img.depth = the_library.getBitDepth(handle);
-    return the_library.showROI(handle, img);
-  }
+  if (stride == ny) return the_library.showROI(MWT_setup_image_16_direct(handle, im, nx, bin));
   else {
-    Image* imp = the_library.cachedImageOfSize(handle, nx, ny);
-    imp->bin = bin;
-    imp->depth = the_library.getBitDepth(handle);
-    for (int x = 0; x < nx; x++) memcpy(imp->pixels + x*imp->size.y, im + x*stride, ny*sizeof(short));
-    return the_library.showROI(handle, *imp);
+    Image *imp = MWT_setup_image_16_copy(handle, im, nx, ny, stride, bin);
+    int result = the_library.showROI(handle, *imp);
+    MWT_setup_image_16_uncopy(handle, im, nx, ny, stride, imp);
+    return result;
   }
 }
 
@@ -332,6 +343,22 @@ int MWT_scan(int handle, TD2Hdl im, int bin)
 }
 
 int MWT_scan_16(int handle, short* im, int nx, int ny, int stride, int bin = 1) {
+  if (handle < 1 || im == NULL) return -3;
+  else if (nx <= 0 || ny <= 0 || stride <= 0) return -4;
+
+  if (stride == ny) {
+    Image img(im, Point(nx, ny), false);
+    img.bin = bin;
+    img.depth = the_library.getBitDepth(handle);
+    return the_library.scanObjects(handle, img);
+  }
+  else {
+    Image* imp = the_library.cachedImageOfSize(handle, nx, ny);
+    imp->bin = bin;
+    imp->depth = the_library.getBitDepth(handle);
+    for (int x = 0; x < nx; x++) memcpy(imp->pixels + x*imp->size.y, im + x*stride, ny*sizeof(short));
+    return the_library.scanObjects(handle, *imp);
+  }
   return -1; // TODO
 }
 
