@@ -1651,6 +1651,7 @@ void Image::set(Contour& c,int width,short I)
 // Copy a source image with resizing/rescaling so both images show the same scene
 void Image::mimic(const Image& source,Rectangle my_region,Rectangle source_region,ScaleType method)
 {
+  // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->8 bits)
   // Convert region to point directly to image pixels
   if (bin > 1) my_region *= bin;
   if (source.bin > 1) source_region *= source.bin;
@@ -1663,25 +1664,19 @@ void Image::mimic(const Image& source,Rectangle my_region,Rectangle source_regio
   
   float dx = (float)source_region.width() / (float)my_region.width();
   float dy = (float)source_region.height() / (float)my_region.height();
-  if (method == Subsample)
-  {  
-    int i,j;     // Iterate over this image
-    float fi,fj; // Iterate over source image with real values
+  if (method == Subsample) {  
+    int i,j;     // Iterate over this image (muliply by dx, dy to get float coords)
     int si,sj;   // Integer version of source image iterators
     
-    for (i=my_region.near.x ; i<=my_region.far.x ; i++)
-    {
-      fi = i*dx;
-      si = source_region.near.x + (int)(fi+1e-4); // Make sure roundoff error doesn't get us!
-      for (j=my_region.near.y ; j<=my_region.far.y ; j++)
-      {
-        fj = j*dy;
-        sj = source_region.near.x + (int)(fj+1e-4);
-        raw(i,j) = source.peek(si,sj);
+    for (i=my_region.near.x ; i<=my_region.far.x ; i++) {
+      si = source_region.near.x + (int)((i*dx)+1e-4);        // Make sure roundoff error doesn't get us!
+      for (j=my_region.near.y ; j<=my_region.far.y ; j++) {
+        sj = source_region.near.x + (int)((j*dy)+1e-4);
+        raw(i,j) = source.peek(si, sj);
       }
+      if (depth > source.depth)      for (j = my_region.near.y; j <= my_region.far.y; j++) raw(i, j) <<= (depth - source.depth);
+      else if (depth < source.depth) for (j = my_region.near.y; j <= my_region.far.y; j++) raw(i, j) >>= (source.depth - depth);
     }
-    if (depth > source.depth) *this <<= (depth-source.depth);
-    else if (depth < source.depth) *this >>= (source.depth-depth);
   }
   else if (method == LinearFit)
   {
@@ -1746,10 +1741,100 @@ void Image::mimic(const Image& source,Rectangle my_region,Rectangle source_regio
   // No else clause--just do nothing for invalid image rescaling method
 }
 
+// Copy a source image with resizing/rescaling so both images show the same scene
+void Image::mimic8(const Image8& source, Rectangle my_region, Rectangle source_region, ScaleType method)
+{
+  // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
+  // Convert region to point directly to image pixels
+  if (bin > 1) my_region *= bin;
+  if (source.bin > 1) source_region *= source.bin;
+  if (!bounds.overlaps(my_region)) return;
+  if (!source.bounds.overlaps(source_region)) return;
+  my_region *= bounds;
+  source_region *= source.bounds;
+  my_region -= bounds.near;
+  source_region -= source.bounds.near;
+  
+  float dx = (float)source_region.width() / (float)my_region.width();
+  float dy = (float)source_region.height() / (float)my_region.height();
+  if (method == Subsample) {  
+    int i,j;     // Iterate over this image (muliply by dx, dy to get float coords)
+    int si,sj;   // Integer version of source image iterators
+    
+    for (i=my_region.near.x ; i<=my_region.far.x ; i++) {
+      si = source_region.near.x + (int)((i*dx)+1e-4);        // Make sure roundoff error doesn't get us!
+      for (j=my_region.near.y ; j<=my_region.far.y ; j++) {
+        sj = source_region.near.x + (int)((j*dy)+1e-4);
+        raw(i,j) = source.peek(si, sj);
+      }
+      if (depth > 8)      for (j = my_region.near.y; j <= my_region.far.y; j++) raw(i, j) <<= (depth - 8);
+      else if (depth < 8) for (j = my_region.near.y; j <= my_region.far.y; j++) raw(i, j) >>= (8 - depth);
+    }
+  }
+  else if (method == LinearFit) {
+    int i,j;               // Iterate over this image
+    float fi0,fi1,fj0,fj1; // Real values over source image
+    int si,sj;             // Integer values over source image
+    float xfrac,yfrac;     // Width of strip in each direction
+    float fI;              // Accumulated intensity
+    float dx_i,dy_i;
+    float shift_mult;      // Multiplicitive factor to take bit shift into account
+    
+    if (depth < 8) shift_mult = 1.0/(float)(1 << (8-depth));
+    else if (depth > 8) shift_mult = (float)(1 << (depth-8));
+    else shift_mult = 1.0;
+    
+    dx_i = 1.0/dx;
+    dy_i = 1.0/dy;
+    for (i=my_region.near.x ; i<=my_region.far.x ; i++) {
+      fi0 = i*dx + source_region.near.x;
+      fi1 = fi0 + dx;
+      for (j=my_region.near.y ; j<=my_region.far.y ; j++) {
+        fj0 = j*dy + source_region.near.y;
+        fj1 = fj0 + dy;
+        
+        si = (int)(fi0+1e-4);
+        if (si+1 > fi1) xfrac = fi1-fi0;
+        else xfrac = (si+1)-fi0;
+        xfrac *= dx_i;
+        
+        fI = 0.0;
+        while (1) {      // Loop over source x; break out from middle
+          sj = (int)(fj0+1e-4);
+          if (sj+1 > fj1) yfrac = fj1-fj0;
+          else yfrac = (sj+1)-fj0;
+          yfrac *= dy_i;
+          
+          while (1) {      // Loop over source y; break out from middle
+            fI += xfrac*yfrac*source.peek(si,sj);
+            
+            sj++;
+            if (sj > fj1-1e-4) break;
+            
+            if (sj+1 > fj1) yfrac = (fj1-sj)*dy_i;
+            else yfrac = dy_i;
+          }
+            
+          si++;
+          if (si > fi1-1e-4) break;
+          
+          if (si+1 > fi1) xfrac = (fi1-si)*dx_i;
+          else xfrac = dx_i;
+        }
+        
+        raw(i,j) = (short)(fI*shift_mult+0.5);
+      }
+    }
+  }
+  // No else clause--just do nothing for invalid image rescaling method
+}
+
+
 
 // Copy a source image onto (a part of) the existing image
 void Image::copy(Point where,const Image& source,Point size,bool fix_depth)
 { 
+  // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->8 bits)
   int x,y;
   if (bin <= 1 && source.bin <= 1) // Fast shortcut--grab memory directly
   {
@@ -1802,6 +1887,7 @@ void Image::copy(Point where,const Image& source,Point size,bool fix_depth)
 // Same thing except copy using a mask
 void Image::copy(const Image& source,Mask& m,bool fix_depth)
 {
+  // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->8 bits)
   int y,y0,y1;
   
   if (depth==source.depth) fix_depth = false;
@@ -1859,15 +1945,112 @@ void Image::copy(const Image& source,Mask& m,bool fix_depth)
 }
 
 
+// Copy a source image onto (a part of) the existing image
+void Image::copy8(Point where, const Image8& source, Point size, bool fix_depth)
+{ 
+  // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
+  int x,y;
+  if (depth == source.depth) fix_depth = false;
+  if (bin <= 1 && source.bin <= 1) { // Fast shortcut--grab memory directly
+    Point swhere = where - source.bounds.near;
+    where -= bounds.near;
+    short *p = pixels + (where.x*this->size.y + where.y);
+    uint8_t *q = source.pixels + (swhere.x*source.size.y + swhere.y);
+    if (!fix_depth) {
+      for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = q[y];
+    }
+    else if (depth > 8) {
+      short shift = depth - 8;
+      for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = ((short)q[y])<<shift;
+    }
+    else { // depth < source.depth
+      short shift = source.depth - depth;
+      for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = ((short)q[y])>>shift;      
+    }
+  }
+  else
+  {
+    Point stop = where + size;
+    if (!fix_depth) {
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = source.get(x,y);
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , source.get(x,y));
+    }
+    else if (depth > source.depth) {
+      short shift = depth - 8;
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = ((short)source.get(x,y))<<shift;
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , ((short)source.get(x,y))<<shift);
+    }
+    else // depth < source.depth
+    {
+      short shift = 8h - depth;
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = ((short)source.get(x,y))>>shift;
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , ((short)source.get(x,y))>>shift);
+    }
+  }
+}
+
+// Same thing except copy using a mask
+void Image::copy8(const Image8& source, Mask& m, bool fix_depth)
+{
+  // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
+  int y,y0,y1;
+  
+  if (depth==source.depth) fix_depth = false;
+  
+  if (bin<=1 && source.bin<=1) {
+    Rectangle safe = bounds * source.bounds;
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        if (!fix_depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.view(m.i().x,y);
+        else if (depth>source.depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.view(m.i().x,y))<<(depth-8);
+        else /*depth<source.depth*/ for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.view(m.i().x,y))>>(8-depth);
+      }
+    }
+  }
+  else {
+    Rectangle safe = getBounds() * source.getBounds();
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        if (!fix_depth) {
+          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.get(m.i().x,y);
+          else for (y=y0;y<=y1;y++) set(m.i().x , y , source.get(m.i().x,y) );
+        }
+        else if (depth > 8) {
+          short shift = depth - 8;
+          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.get(m.i().x,y))<<shift;
+          else for (y=y0;y<=y1;y++) set(m.i().x , y , ((short)source.get(m.i().x,y))<<shift );          
+        }
+        else // depth < source.depth
+        {
+          short shift = 8 - depth;
+          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.get(m.i().x,y))>>shift;
+          else for (y=y0;y<=y1;y++) set(m.i().x , y , ((short)source.get(m.i().x,y))>>shift );          
+        }
+      }
+    }
+  }
+}
+
+
 // Adapt an image so that it is closer to a source image; requires rate>=0 and rate >= our depth - source depth
 void Image::adapt(Point where,const Image& im,Point size,int rate)
 {
+  // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int x,y;
   bool irlz = false;
   int imrate = rate - depth + im.depth;
   if (imrate<0) { irlz=true; imrate = -imrate; }
-  if (bin <= 1 && im.bin <= 1)
-  {
+  if (bin <= 1 && im.bin <= 1) {
     Point swhere = where - im.bounds.near;
     where -= bounds.near;
     short *p = pixels + (where.x*this->size.y + where.y);
@@ -1876,17 +2059,14 @@ void Image::adapt(Point where,const Image& im,Point size,int rate)
     else if (irlz) for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += (q[y]<<imrate) - (p[y]>>rate);
     else for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += (q[y]>>imrate) - (p[y]>>rate);
   }
-  else
-  {
+  else {
     Point stop = where + size;
-    if (bin<=1)
-    {
+    if (bin<=1) {
       if (imrate==0) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += im.get(x,y) - (rare(x,y)>>rate);
       else if (irlz) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += (im.get(x,y)<<imrate) - (rare(x,y)>>rate);
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += (im.get(x,y)>>imrate) - (rare(x,y)>>rate);
     }
-    else
-    {
+    else {
       short I;
       if (imrate==0) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) { I = get(x,y); set(x,y, I + im.get(x,y) - (I>>rate)); }
       else if (irlz) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) { I = get(x,y); set(x,y, I + (im.get(x,y)<<imrate) - (I>>rate)); }
@@ -1898,16 +2078,15 @@ void Image::adapt(Point where,const Image& im,Point size,int rate)
 // Same thing except adapt using a mask
 void Image::adapt(const Image& im,Mask &m,int rate)
 {
+  // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int y,y0,y1;
   bool irlz = false;
   int imrate = rate - depth + im.depth;
   if (imrate<0) { irlz=true; imrate = -imrate; }
-  if (bin<=1 && im.bin<=1)
-  {
+  if (bin<=1 && im.bin<=1) {
     Rectangle safe = bounds * im.bounds;
     m.start();
-    while (m.advance())
-    {
+    while (m.advance()) {
       if (m.i().beyond( safe.far )) break;
       if (m.i().before( safe.near )) continue;
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
@@ -1918,47 +2097,124 @@ void Image::adapt(const Image& im,Mask &m,int rate)
       else for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.view(m.i().x,y)>>imrate) - (rare(m.i().x,y)>>rate);
     }
   }
-  else
-  {
+  else {
     short I;
     Rectangle safe = getBounds() * im.getBounds();
     m.start();
-    while (m.advance())
-    {
+    while (m.advance()) {
       if (m.i().beyond( safe.far )) break;
       if (m.i().before( safe.near )) continue;
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
-      if (y0<=y1)
-      {
-        if (bin<=1)
-	{
-	  if (imrate==0) for (y=y0;y<=y1;y++) rare(m.i().x,y) += im.get(m.i().x,y) - (rare(m.i().x,y)>>rate);
-	  else if (irlz) for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.get(m.i().x,y)<<imrate) - (rare(m.i().x,y)>>rate);
-	  else for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.get(m.i().x,y)>>imrate) - (rare(m.i().x,y)>>rate);
-	}
-        else
-	{
-	  if (imrate==0) for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + im.get(m.i().x,y) - (I>>rate) ); }
-	  else if (irlz) for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + (im.get(m.i().x,y)<<imrate) - (I>>rate) ); }
-	  else for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + (im.get(m.i().x,y)>>imrate) - (I>>rate) ); }
-	}
+      if (y0<=y1) {
+        if (bin<=1) {
+      	  if (imrate==0) for (y=y0;y<=y1;y++) rare(m.i().x,y) += im.get(m.i().x,y) - (rare(m.i().x,y)>>rate);
+      	  else if (irlz) for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.get(m.i().x,y)<<imrate) - (rare(m.i().x,y)>>rate);
+      	  else for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.get(m.i().x,y)>>imrate) - (rare(m.i().x,y)>>rate);
+      	}
+        else {
+      	  if (imrate==0) for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + im.get(m.i().x,y) - (I>>rate) ); }
+      	  else if (irlz) for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + (im.get(m.i().x,y)<<imrate) - (I>>rate) ); }
+      	  else for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + (im.get(m.i().x,y)>>imrate) - (I>>rate) ); }
+      	}
       }
     }
   }
 }
 
 
+// Adapt an image so that it is closer to a source image; requires rate>=0 and rate >= our depth - 8
+void Image::adapt8(Point where, const Image8& im, Point size, int rate)
+{
+  // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
+  int x,y;
+  bool irlz = false;
+  int imrate = rate - depth + 8;
+  if (imrate<0) { irlz=true; imrate = -imrate; }
+  if (bin <= 1 && im.bin <= 1) {
+    Point swhere = where - im.bounds.near;
+    where -= bounds.near;
+    short *p = pixels + (where.x*this->size.y + where.y);
+    uint8_t *q = im.pixels + (swhere.x*im.size.y + swhere.y);
+    if (imrate==0) for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += ((short)q[y]) - (p[y]>>rate);
+    else if (irlz) for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += (((short)q[y])<<imrate) - (p[y]>>rate);
+    else for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += (((short)q[y])>>imrate) - (p[y]>>rate);
+  }
+  else {
+    Point stop = where + size;
+    if (bin<=1) {
+      if (imrate==0) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += ((short)im.get(x,y)) - (rare(x,y)>>rate);
+      else if (irlz) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += (((short)im.get(x,y))<<imrate) - (rare(x,y)>>rate);
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += (((short)im.get(x,y))>>imrate) - (rare(x,y)>>rate);
+    }
+    else {
+      short I;
+      if (imrate==0) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) { I = get(x,y); set(x,y, I + ((short)im.get(x,y)) - (I>>rate)); }
+      else if (irlz) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) { I = get(x,y); set(x,y, I + (((short)im.get(x,y))<<imrate) - (I>>rate)); }
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) { I = get(x,y); set(x,y, I + (((short)im.get(x,y))>>imrate) - (I>>rate)); }
+    }
+  }
+}
+
+// Same thing except adapt using a mask
+void Image::adapt8(const Image8& im, Mask &m, int rate)
+{
+  // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
+  int y,y0,y1;
+  bool irlz = false;
+  int imrate = rate - depth + 8;
+  if (imrate<0) { irlz=true; imrate = -imrate; }
+  if (bin<=1 && im.bin<=1) {
+    Rectangle safe = bounds * im.bounds;
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0>y1) continue;
+      if (imrate==0) for (y=y0;y<=y1;y++) rare(m.i().x,y) += ((short)im.view(m.i().x,y)) - (rare(m.i().x,y)>>rate);
+      else if (irlz) for (y=y0;y<=y1;y++) rare(m.i().x,y) += (((short)im.view(m.i().x,y))<<imrate) - (rare(m.i().x,y)>>rate);
+      else for (y=y0;y<=y1;y++) rare(m.i().x,y) += (((short)im.view(m.i().x,y))>>imrate) - (rare(m.i().x,y)>>rate);
+    }
+  }
+  else {
+    short I;
+    Rectangle safe = getBounds() * im.getBounds();
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        if (bin<=1) {
+          if (imrate==0) for (y=y0;y<=y1;y++) rare(m.i().x,y) += ((short)im.get(m.i().x,y)) - (rare(m.i().x,y)>>rate);
+          else if (irlz) for (y=y0;y<=y1;y++) rare(m.i().x,y) += (((short)im.get(m.i().x,y))<<imrate) - (rare(m.i().x,y)>>rate);
+          else for (y=y0;y<=y1;y++) rare(m.i().x,y) += (((short)im.get(m.i().x,y))>>imrate) - (rare(m.i().x,y)>>rate);
+        }
+        else {
+          if (imrate==0) for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + ((short)im.get(m.i().x,y)) - (I>>rate) ); }
+          else if (irlz) for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + (((short)im.get(m.i().x,y))<<imrate) - (I>>rate) ); }
+          else for (y=y0;y<=y1;y++) { I = get(m.i().x,y); set(m.i().x , y , I + (((short)im.get(m.i().x,y))>>imrate) - (I>>rate) ); }
+        }
+      }
+    }
+  }
+}
+
+
+
 // Copy an image with background subtraction and a gray offset; requires bg depth >= source depth
 // Does not scale the bit depth for the current image!  It's assumed to be one more than the source.  Make sure there's room!
 // Division method adds 1 to fg & bg values to avoid errors with zeros (0/whatever = 0, whatever/0 = error).
-void Image::diffCopy(Point where,const Image& source,Point size,const Image& bg)
+void Image::diffCopy(Point where, const Image& source, Point size, const Image& bg)
 { 
+  // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int x,y;
   short gray = 1 << source.depth;
   short shift = (source.depth<bg.depth) ? bg.depth-source.depth : 0;
-  if (bin <= 1 && source.bin <= 1) // Fast shortcut--grab memory directly
-  {
+  if (bin <= 1 && source.bin <= 1) { // Fast shortcut--grab memory directly
     int shiftmask = 0xFFFF>>shift;
     int dualgray = ((int)gray) | (((int)gray)<<16);
     int dualshiftmask = shiftmask | (shiftmask<<16);
@@ -1970,39 +2226,31 @@ void Image::diffCopy(Point where,const Image& source,Point size,const Image& bg)
     short *q = source.pixels + (swhere.x*source.size.y + swhere.y);
     short *g = bg.pixels + (bgwhere.x*bg.size.y + bgwhere.y);
     
-    if (divide_bg)  // This is 2*fg/(fg+bg) . . . slower but better for large changes in background!
-    {
+    if (divide_bg) { // This is 2*fg/(fg+bg) . . . slower but better for large changes in background!
       for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) for (y=0;y<size.y;y++)
           p[y] = ((1+(unsigned int)q[y])<<(source.depth+1)) / ((unsigned int)q[y] + (unsigned int)(g[y]>>shift) + 2);
     }          
-    else  // This is just fg-bg . . . fast!  (Even faster when we use an int to do two short operations at once.)
-    {
-      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y)
-      {
+    else { // This is just fg-bg . . . fast!  (Even faster when we use an int to do two short operations at once.)
+      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) {
         for (y=0;y<size.y-1;y+=2) *(int*)(p+y) = (dualgray + *(int*)(q+y)) - (((*(int*)(g+y))>>shift)&dualshiftmask);
         for (;y<size.y;y++) p[y] = q[y] - (g[y]>>shift) + gray;
       }
     }
   }
-  else
-  {
+  else {
     Point stop = where + size;
-    if (divide_bg)
-    {
+    if (divide_bg) {
       register unsigned int I_fg;
-      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++)
-          {
-            I_fg = 1 + (unsigned int)source.get(x,y);
-            rare(x,y) = (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.get(x,y)>>shift));
-          }
-      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++)
-          {
-            I_fg = 1 + (unsigned int)source.get(x,y);
-            set(x,y , (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.get(x,y)>>shift)) );
-          }
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
+        I_fg = 1 + (unsigned int)source.get(x,y);
+        rare(x,y) = (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.get(x,y)>>shift));
+      }
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
+        I_fg = 1 + (unsigned int)source.get(x,y);
+        set(x,y , (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.get(x,y)>>shift)) );
+      }
     }
-    else
-    {
+    else {
       if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = source.get(x,y) - (bg.get(x,y)>>shift) + gray;
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , source.get(x,y) - (bg.get(x,y)>>shift) + gray);
     }
@@ -2012,75 +2260,186 @@ void Image::diffCopy(Point where,const Image& source,Point size,const Image& bg)
 // Same thing except copy using a mask
 void Image::diffCopy(const Image& source,Mask& m,const Image& bg)
 {
+  // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int y,y0,y1;
   unsigned int I_fg;
   short gray = 1 << source.depth;
   short shift = (source.depth<bg.depth) ? bg.depth-source.depth : 0;
-  if (bin<=1 && source.bin<=1)
-  {
+  if (bin<=1 && source.bin<=1) {
     int shiftmask = 0xFFFF>>shift;
     int dualgray = ((int)gray) | (((int)gray)<<16);
     int dualshiftmask = shiftmask | (shiftmask<<16);
 
     Rectangle safe = bounds * source.bounds;
     m.start();
-    while (m.advance())
-    {
+    while (m.advance()) {
       if (m.i().beyond( safe.far )) break;
       if (m.i().before( safe.near )) continue;
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
-      if (y0<=y1)
-      {
-        if (divide_bg)
-          for (y=y0;y<=y1;y++)
-          {
-            I_fg = 1+(unsigned int)source.view(m.i().x,y);
-            rare(m.i().x,y) = (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.view(m.i().x,y)>>shift));
-          }
-        else
-        {
-          for (y=y0;y<y1;y++) rareI(m.i().x,y) = (dualgray + source.viewI(m.i().x,y)) - ((bg.viewI(m.i().x,y)>>shift)&dualshiftmask);
+      if (y0<=y1) {
+        if (divide_bg) for (y=y0;y<=y1;y++) {
+          I_fg = 1+(unsigned int)source.view(m.i().x,y);
+          rare(m.i().x,y) = (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.view(m.i().x,y)>>shift));
+        }
+        else {
+          for (y=y0;y<y1;y+=2) rareI(m.i().x,y) = (dualgray + source.viewI(m.i().x,y)) - ((bg.viewI(m.i().x,y)>>shift)&dualshiftmask);
           for (;y<=y1;y++) rare(m.i().x,y) = source.view(m.i().x,y) - (bg.view(m.i().x,y)>>shift) + gray;
         }
       }
     }
   }
-  else
-  {
+  else {
     Rectangle safe = getBounds() * source.getBounds();
     m.start();
-    while (m.advance())
-    {
+    while (m.advance()) {
       if (m.i().beyond( safe.far )) break;
       if (m.i().before( safe.near )) continue;
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
-      if (y0<=y1)
-      {
-        if (divide_bg)
-        {
-          if (bin<=1)
-          {
-            for (y=y0;y<=y1;y++)
-            {
-              I_fg = 1+(unsigned int)source.get(m.i().x,y);
-              rare(m.i().x,y) = (I_fg<<(source.depth+1))/(1 + I_fg + (unsigned int)(bg.get(m.i().x,y)>>shift));
-            }
+      if (y0<=y1) {
+        if (divide_bg) {
+          if (bin<=1) for (y=y0;y<=y1;y++) {
+            I_fg = 1+(unsigned int)source.get(m.i().x,y);
+            rare(m.i().x,y) = (I_fg<<(source.depth+1))/(1 + I_fg + (unsigned int)(bg.get(m.i().x,y)>>shift));
           }
-          else
-          {
-            for (y=y0;y<=y1;y++)
-            {
-              I_fg = 1+(unsigned int)source.get(m.i().x,y);
-              set(m.i().x,y , (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.get(m.i().x,y)>>shift)) );
-            }
+          else for (y=y0;y<=y1;y++) {
+            I_fg = 1+(unsigned int)source.get(m.i().x,y);
+            set(m.i().x,y , (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.get(m.i().x,y)>>shift)) );
           }
         }
-        else
-        {
+        else {
           if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.get(m.i().x,y) - (bg.get(m.i().x,y)>>shift) + gray;
           else for (y=y0;y<=y1;y++) set(m.i().x , y , source.get(m.i().x,y) - (bg.get(m.i().x,y)>>shift) + gray );
+        }
+      }
+    }
+  }
+}
+
+
+
+// Copy an image with background subtraction and a gray offset; requires bg depth >= source depth
+// Does not scale the bit depth for the background image!  It's assumed to be one more than the source.  Make sure there's room!
+// Division method adds 1 to fg & bg values to avoid errors with zeros (0/whatever = 0, whatever/0 = error).
+void Image::diffCopy8(Point where, const Image8& source, Point size, const Image& bg)
+{ 
+  // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
+  int x,y;
+  short gray = 1 << bg.depth;
+  short shift = (bg.depth > 8) ? bg.depth-8 : 0;
+  if (bin <= 1 && source.bin <= 1) { // Fast shortcut--grab memory directly
+    int dualgray = ((int)gray) | (((int)gray)<<16);
+
+    Point swhere = where-source.bounds.near;
+    Point bgwhere = where - bg.bounds.near;
+    where -= bounds.near;
+    short *p = pixels + (where.x*this->size.y + where.y);
+    short *q = source.pixels + (swhere.x*source.size.y + swhere.y);
+    short *g = bg.pixels + (bgwhere.x*bg.size.y + bgwhere.y);
+    
+    if (divide_bg) { // This is 2*fg/(fg+bg) . . . slower but better for large changes in background!
+      int divshift = source_depth + 1
+      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) for (y=0;y<size.y;y++) {
+        val qq = 1 + ((unsigned int) q[y])<<shift;
+          p[y] = (qq << divshift) / (qq + (unsigned int)g[y] + 1);
+    }          
+    else { // This is just fg-bg . . . fast!  (Even faster when we use an int to do two short operations at once.)
+      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) {
+        for (y=0;y<size.y-1;y+=2) {
+          uint16_t qy = *(uint16_t*)(q + y);
+          int qq = ((((int)(qy & 0xFF00)) << 8) | (qy & 0xFF)) << shift;
+          *(int*)(p+y) = dualgray + qq - (*(int*)(g+y));
+        }
+        for (;y<size.y;y++) p[y] = (((short)q[y]) << shift) - g[y] + gray;
+      }
+    }
+  }
+  else {
+    Point stop = where + size;
+    if (divide_bg) {
+      int divshift = source_depth + 1
+      register unsigned int I_fg;
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
+        I_fg = 1 + (((unsigned int)source.get(x,y)) << shift);
+        rare(x,y) = (I_fg<<divshift) / (1 + I_fg + bg.get(x,y));
+      }
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
+        I_fg = 1 + (((unsigned int)source.get(x,y)) << shift);
+        set(x,y , (I_fg<<divshift) / (1 + I_fg + bg.get(x,y)) );
+      }
+    }
+    else {
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
+        rare(x,y) = (((short)source.get(x,y)) << shift) - bg.get(x,y) + gray;
+      }
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
+        set(x,y , (((short)source.get(x,y)) << shift) - bg.get(x,y) + gray);
+      }
+    }
+  }
+}
+
+// Same thing except copy using a mask
+void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
+{
+  // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
+  int y,y0,y1;
+  unsigned int I_fg;
+  short gray = 1 << source.depth;
+  short shift = (source.depth<bg.depth) ? bg.depth-source.depth : 0;
+  if (bin<=1 && source.bin<=1) {
+    int dualgray = ((int)gray) | (((int)gray)<<16);
+
+    Rectangle safe = bounds * source.bounds;
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        if (divide_bg) {
+          int divshift = source.depth + 1;
+          for (y=y0;y<=y1;y++) {
+            I_fg = 1 + (((unsigned int)source.view(m.i().x,y)) << shift);
+            rare(m.i().x,y) = (I_fg<<divshift) / (1 + I_fg + (unsigned int)(bg.view(m.i().x,y)));
+          }
+        }
+        else {
+          for (y=y0;y<y1;y+=2) {
+            unsigned short sy = source.viewS(m.i().x,y);
+            int iyy = ((((int)(sy & 0xFF00)) << 8) | (sy & 0xFF)) << shift;
+            rareI(m.i().x,y) = dualgray + iyy - bg.viewI(m.i().x,y);
+          }
+          for (;y<=y1;y++) rare(m.i().x,y) = (((short)source.view(m.i().x,y)) << shift) - bg.view(m.i().x,y) + gray;
+        }
+      }
+    }
+  }
+  else {
+    Rectangle safe = getBounds() * source.getBounds();
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        if (divide_bg) {
+          int divshift = source.depth + 1;
+          if (bin<=1) for (y=y0;y<=y1;y++) {
+            I_fg = 1 + (((unsigned int)source.get(m.i().x,y)) << shift);
+            rare(m.i().x,y) = (I_fg<<divshift)/(1 + I_fg + (unsigned int)bg.get(m.i().x,y));
+          }
+          else for (y=y0;y<=y1;y++) {
+            I_fg = 1 + (((unsigned int)source.get(m.i().x,y)) << shift);
+            set(m.i().x,y , (I_fg<<divshift) / (1 + I_fg + (unsigned int)bg.get(m.i().x,y)) );
+          }
+        }
+        else {
+          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.get(m.i().x,y) << shift) - bg.get(m.i().x,y) + gray;
+          else for (y=y0;y<=y1;y++) set(m.i().x , y , ((short)source.get(m.i().x,y) << shift) - bg.get(m.i().x,y) + gray );
         }
       }
     }
@@ -2178,14 +2537,14 @@ void Image::diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,i
     {
       for (y=where.y;y<stop.y;y++)
       {
-	I = bg.get(x,y);
-	J = source.get(x,y);
-	if (srcrate==0) I += J - (I>>rate);
-	else if (sclz) I += (J<<srcrate) - (I>>rate);
-	else I += (J>>srcrate) - (I>>rate);
-	bg.set(x,y,I);
+      	I = bg.get(x,y);
+      	J = source.get(x,y);
+      	if (srcrate==0) I += J - (I>>rate);
+      	else if (sclz) I += (J<<srcrate) - (I>>rate);
+      	else I += (J>>srcrate) - (I>>rate);
+      	bg.set(x,y,I);
         if (divide_bg) set(x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
-	else set(x,y , J - (I>>shift) + gray);
+      	else set(x,y , J - (I>>shift) + gray);
       }
     }
   }
@@ -2877,6 +3236,416 @@ void Image8::set(Contour& c, int width, uint8_t I)
 }
 
 
+// Copy a source image with resizing/rescaling so both images show the same scene
+void Image8::mimic(const Image8& source, Rectangle my_region, Rectangle source_region, ScaleType method)
+{
+  // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (16->8, 8->16, 16->16 bits)
+  // Convert region to point directly to image pixels
+  if (bin > 1) my_region *= bin;
+  if (source.bin > 1) source_region *= source.bin;
+  if (!bounds.overlaps(my_region)) return;
+  if (!source.bounds.overlaps(source_region)) return;
+  my_region *= bounds;
+  source_region *= source.bounds;
+  my_region -= bounds.near;
+  source_region -= source.bounds.near;
+  
+  float dx = (float)source_region.width() / (float)my_region.width();
+  float dy = (float)source_region.height() / (float)my_region.height();
+  if (method == Subsample) {  
+    int i,j;     // Iterate over this image (muliply by dx, dy to get float coords)
+    int si,sj;   // Integer version of source image iterators
+    
+    for (i=my_region.near.x ; i<=my_region.far.x ; i++) {
+      si = source_region.near.x + (int)((i*dx)+1e-4);        // Make sure roundoff error doesn't get us!
+      for (j=my_region.near.y ; j<=my_region.far.y ; j++) {
+        sj = source_region.near.x + (int)((j*dy)+1e-4);
+        raw(i,j) = source.peek(si, sj);
+      }
+    }
+  }
+  else if (method == LinearFit) {
+    int i,j;               // Iterate over this image
+    float fi0,fi1,fj0,fj1; // Real values over source image
+    int si,sj;             // Integer values over source image
+    float xfrac,yfrac;     // Width of strip in each direction
+    float fI;              // Accumulated intensity
+    float dx_i,dy_i;
+    
+    dx_i = 1.0/dx;
+    dy_i = 1.0/dy;
+    for (i=my_region.near.x ; i<=my_region.far.x ; i++) {
+      fi0 = i*dx + source_region.near.x;
+      fi1 = fi0 + dx;
+      for (j=my_region.near.y ; j<=my_region.far.y ; j++) {
+        fj0 = j*dy + source_region.near.y;
+        fj1 = fj0 + dy;
+        
+        si = (int)(fi0+1e-4);
+        if (si+1 > fi1) xfrac = fi1-fi0;
+        else xfrac = (si+1)-fi0;
+        xfrac *= dx_i;
+        
+        fI = 0.0;
+        while (1) {      // Loop over source x; break out from middle
+          sj = (int)(fj0+1e-4);
+          if (sj+1 > fj1) yfrac = fj1-fj0;
+          else yfrac = (sj+1)-fj0;
+          yfrac *= dy_i;
+          
+          while (1) {      // Loop over source y; break out from middle
+            fI += xfrac*yfrac*source.peek(si,sj);
+            
+            sj++;
+            if (sj > fj1-1e-4) break;
+            
+            if (sj+1 > fj1) yfrac = (fj1-sj)*dy_i;
+            else yfrac = dy_i;
+          }
+            
+          si++;
+          if (si > fi1-1e-4) break;
+          
+          if (si+1 > fi1) xfrac = (fi1-si)*dx_i;
+          else xfrac = dx_i;
+        }
+        
+        raw(i,j) = (uint8_t)(fI + 0.5);
+      }
+    }
+  }
+  // No else clause--just do nothing for invalid image rescaling method
+}
+
+// Copy a source image with resizing/rescaling so both images show the same scene
+void Image8::mimic16(const Image& source, Rectangle my_region, Rectangle source_region, ScaleType method)
+{
+  // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
+  // Convert region to point directly to image pixels
+  if (bin > 1) my_region *= bin;
+  if (source.bin > 1) source_region *= source.bin;
+  if (!bounds.overlaps(my_region)) return;
+  if (!source.bounds.overlaps(source_region)) return;
+  my_region *= bounds;
+  source_region *= source.bounds;
+  my_region -= bounds.near;
+  source_region -= source.bounds.near;
+  
+  float dx = (float)source_region.width() / (float)my_region.width();
+  float dy = (float)source_region.height() / (float)my_region.height();
+  if (method == Subsample) {  
+    int i,j;     // Iterate over this image (muliply by dx, dy to get float coords)
+    int si;      // Integer version of source image iterators
+    
+    for (i=my_region.near.x ; i<=my_region.far.x ; i++) {
+      si = source_region.near.x + (int)((i*dx)+1e-4);        // Make sure roundoff error doesn't get us!
+      if (source.depth == 8) {
+        for (j=my_region.near.y ; j<=my_region.far.y ; j++)
+          raw(i,j) = (uint8_t)source.peek(si, source_region.near.x + (int)((j*dy)+1e-4));
+      }
+      else if (source.depth > 8) {
+        for (j=my_region.near.y ; j<=my_region.far.y ; j++)
+          raw(i,j) = (uint8_t)(source.peek(si, source_region.near.x + (int)((j*dy)+1e-4)) >> (source.depth - 8));
+      }
+      else { //source.depth < 8
+        for (j=my_region.near.y ; j<=my_region.far.y ; j++)
+          raw(i,j) = (uint8_t)(source.peek(si, source_region.near.x + (int)((j*dy)+1e-4)) << (8 - source.depth));
+      }
+    }
+  }
+  else if (method == LinearFit) {
+    int i,j;               // Iterate over this image
+    float fi0,fi1,fj0,fj1; // Real values over source image
+    int si,sj;             // Integer values over source image
+    float xfrac,yfrac;     // Width of strip in each direction
+    float fI;              // Accumulated intensity
+    float dx_i,dy_i;
+    float shift_mult;      // Multiplicitive factor to take bit shift into account
+    
+    if (8 < source.depth) shift_mult = 1.0/(float)(1 << (source.depth-8));
+    else if (8 > source.depth) shift_mult = (float)(1 << (8-source.depth));
+    else shift_mult = 1.0;
+    
+    dx_i = 1.0/dx;
+    dy_i = 1.0/dy;
+    for (i=my_region.near.x ; i<=my_region.far.x ; i++) {
+      fi0 = i*dx + source_region.near.x;
+      fi1 = fi0 + dx;
+      for (j=my_region.near.y ; j<=my_region.far.y ; j++) {
+        fj0 = j*dy + source_region.near.y;
+        fj1 = fj0 + dy;
+        
+        si = (int)(fi0+1e-4);
+        if (si+1 > fi1) xfrac = fi1-fi0;
+        else xfrac = (si+1)-fi0;
+        xfrac *= dx_i;
+        
+        fI = 0.0;
+        while (1) {      // Loop over source x; break out from middle
+          sj = (int)(fj0+1e-4);
+          if (sj+1 > fj1) yfrac = fj1-fj0;
+          else yfrac = (sj+1)-fj0;
+          yfrac *= dy_i;
+          
+          while (1) {      // Loop over source y; break out from middle
+            fI += xfrac*yfrac*source.peek(si,sj);
+            
+            sj++;
+            if (sj > fj1-1e-4) break;
+            
+            if (sj+1 > fj1) yfrac = (fj1-sj)*dy_i;
+            else yfrac = dy_i;
+          }
+            
+          si++;
+          if (si > fi1-1e-4) break;
+          
+          if (si+1 > fi1) xfrac = (fi1-si)*dx_i;
+          else xfrac = dx_i;
+        }
+        
+        raw(i,j) = (uint8_t)(fI*shift_mult+0.5);
+      }
+    }
+  }
+  // No else clause--just do nothing for invalid image rescaling method
+}
+
+
+// Copy a source image onto (a part of) the existing image
+void Image8::copy(Point where, const Image8& source, Point size)
+{ 
+  int x,y;
+  if (8 == source.depth) fix_depth = false;
+  if (bin <= 1 && source.bin <= 1) { // Fast shortcut--grab memory directly
+    Point swhere = where - source.bounds.near;
+    where -= bounds.near;
+    uint8_t *p = pixels + (where.x*this->size.y + where.y);
+    uint8_t *q = source.pixels + (swhere.x*source.size.y + swhere.y);
+    for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = q[y];
+  }
+  else {
+    Point stop = where + size;
+    if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = source.get(x,y);
+    else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , source.get(x,y));
+  }
+}
+
+// Same thing except copy using a mask
+void Image8::copy(const Image8& source, Mask& m)
+{
+  int y,y0,y1;
+  
+  if (8 == source.depth) fix_depth = false;
+  
+  if (bin<=1 && source.bin<=1) {
+    Rectangle safe = bounds * source.bounds;
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        rare(m.i().x,y) = source.view(m.i().x,y);
+      }
+    }
+  }
+  else {
+    Rectangle safe = getBounds() * source.getBounds();
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.get(m.i().x,y);
+        else for (y=y0;y<=y1;y++) set(m.i().x , y , source.get(m.i().x,y) );
+      }
+    }
+  }
+}
+
+// Copy a source image onto (a part of) the existing image
+void Image8::copy16(Point where, const Image& source, Point size, bool fix_depth)
+{ 
+  int x,y;
+  if (8 == source.depth) fix_depth = false;
+  if (bin <= 1 && source.bin <= 1) { // Fast shortcut--grab memory directly
+    Point swhere = where - source.bounds.near;
+    where -= bounds.near;
+    uint8_t *p = pixels + (where.x*this->size.y + where.y);
+    short *q = source.pixels + (swhere.x*source.size.y + swhere.y);
+    if (!fix_depth) {
+      for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = (uint8_t)q[y];
+    }
+    else if (source_depth < 8) {
+      short shift = 8 - source_depth;
+      for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = (uint8_t)(q[y]<<shift);
+    }
+    else { // source.depth > 8
+      short shift = source.depth - 8;
+      for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = (uint8_t)(q[y]>>shift);      
+    }
+  }
+  else {
+    Point stop = where + size;
+    if (!fix_depth) {
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = (uint8_t)source.get(x,y);
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , (uint8_t)source.get(x,y));
+    }
+    else if (8 > source.depth) {
+      short shift = 8 - source.depth;
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = (uint8_t)(source.get(x,y)<<shift);
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , (uint8_t)(source.get(x,y)<<shift));
+    }
+    else // 8 < source.depth
+    {
+      short shift = source.depth - 8;
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = (uint8_t)(source.get(x,y)>>shift);
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , (uint8_t)(source.get(x,y)>>shift));
+    }
+  }
+}
+
+// Same thing except copy using a mask
+void Image8::copy16(const Image& source, Mask& m, bool fix_depth)
+{
+  int y,y0,y1;
+  
+  if (8 == source.depth) fix_depth = false;
+  
+  if (bin<=1 && source.bin<=1) {
+    Rectangle safe = bounds * source.bounds;
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        if (!fix_depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)source.view(m.i().x,y);
+        else if (depth>source.depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.view(m.i().x,y)<<(depth-8));
+        else /*depth<source.depth*/ for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.view(m.i().x,y)>>(8-depth));
+      }
+    }
+  }
+  else {
+    Rectangle safe = getBounds() * source.getBounds();
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0<=y1) {
+        if (!fix_depth) {
+          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.get(m.i().x,y);
+          else for (y=y0;y<=y1;y++) set(m.i().x , y , source.get(m.i().x,y) );
+        }
+        else if (8 > source.depth) {
+          short shift = 8 - source.depth;
+          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.get(m.i().x,y)<<shift);
+          else for (y=y0;y<=y1;y++) set(m.i().x , y , (uint8_t)(source.get(m.i().x,y)<<shift) );          
+        }
+        else // source.depth > 8
+        {
+          short shift = 8 - depth;
+          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.get(m.i().x,y)>>shift);
+          else for (y=y0;y<=y1;y++) set(m.i().x , y , (uint8_t)(source.get(m.i().x,y)>>shift) );          
+        }
+      }
+    }
+  }
+}
+
+
+// Creates an appropriate TIFF header for this image; returns header size
+int Image8::makeTiffHeader(unsigned char *buffer)
+{
+  int bytes = getHeight()*getWidth();
+  
+  short* sbuf = (short*)buffer;
+  int* ibuf = (int*)buffer;
+  TiffIFD* tbuf = (TiffIFD*)(buffer + 10);
+  
+  sbuf[0] = 0x0102;
+  if (buffer[0]==2)  buffer[0] = buffer[1] = 'I';         // Little endian
+  else buffer[0] = buffer[1] = 'M';                       // Big endian 
+  sbuf[1] = 42;                                           // Tiff file identifier
+  ibuf[1] = 8;                                            // Offset of start of IFD
+  sbuf[4] = 10;                                           // Ten entries in IFD
+  tbuf[0] = TiffIFD(256,4,1,getHeight());                 // Image width (binned)--our data is row-minor so it's flipped
+  tbuf[1] = TiffIFD(257,4,1,getWidth());                  // Image height (binned)
+  tbuf[2] = TiffIFD(258,4,1,8);                           // Bit depth
+  tbuf[3] = TiffIFD(259,4,1,1);                           // No compression
+  tbuf[4] = TiffIFD(262,4,1,1);                           // Zero is black
+  tbuf[5] = TiffIFD(273,4,1,30+10*sizeof(TiffIFD));       // Offsets of image
+  tbuf[6] = TiffIFD(278,4,1,getWidth());                  // All of image in one strip
+  tbuf[7] = TiffIFD(279,4,1,bytes);                       // Size of image
+  tbuf[8] = TiffIFD(282,5,1,14+10*sizeof(TiffIFD));       // X resolution (dummy value)
+  tbuf[9] = TiffIFD(283,5,1,22+10*sizeof(TiffIFD));       // Y resolution (dummy value)
+  ibuf = (int*)(buffer + (10 + 10*sizeof(TiffIFD)));
+  ibuf[0] = 0;                                            // No more IFDs
+  ibuf[1] = 72;                                           // X resolution is 72 pixels...
+  ibuf[2] = 1;                                            // ...per one inch
+  ibuf[3] = 72;                                           // Y resolution is 72 pixels...
+  ibuf[4] = 1;                                            // ...per one inch
+  return 30 + 10*sizeof(TiffIFD);
+}
+
+
+// Write an image to a tiff file given an open file
+int Image8::writeTiff(FILE *f)
+{
+  if (!f) return 1;
+
+  int i,x,y;
+  int pixbytes;  
+  unsigned char header[(46 + 10*sizeof(TiffIFD)) << 2];  // Way more space than we need
+  uint8_t* data;
+  
+  Rectangle r = getBounds();
+  i = 0;
+  data = new unsigned char[r.area()];
+  for (x=r.near.x;x<=r.far.x;x++) for (y=r.near.y;y<=r.far.y;y++) data[i++] = get(x, y);
+  pixbytes = i;
+  
+  i = makeTiffHeader(header);
+  x = fwrite(header,i,1,f);
+  y = fwrite(data,1,pixbytes,f);
+  
+  delete[] data;
+  
+  if (x != 1 || y != pixbytes) return 1;
+
+  return 0;
+}
+
+
+// Write an image to a tiff file given the filename
+int Image8::writeTiff(const char *fname)
+{
+  int i;
+  FILE* f = fopen(fname,"wb");
+  if (!f) return 1;
+  i = writeTiff(f);
+  fclose(f);
+  return i;
+}
+
+void Image8::println() const
+{
+  printf("%d,%d %d,%d\n",bounds.near.x,bounds.near.y,bounds.far.x,bounds.far.y);
+  Rectangle b = getBounds();
+  printf("%d,%d %d,%d\n",b.near.x,b.near.y,b.far.x,b.far.y);
+  for (int i=b.near.x;i<=b.far.x;i++) {
+    for (int j=b.near.y;j<=b.far.y;j++) printf("%02x",get(i,j));
+    printf("\n");
+  }
+  printf("\n");
+}
 
 
 /****************************************************************
@@ -3254,14 +4023,18 @@ int test_mwt_image_image()
   return 0;
 }
 
+int test_mwt_image_image8() {
+  return 1;
+}
+
 int test_mwt_image()
 {
   return 
     test_mwt_image_strip() + 
-    100*test_mwt_image_mask() + 
-    10000*test_mwt_image_contour() + 
-    1000000*test_mwt_image_image() +
-    100000000*test_static_image_copy();
+    10*test_mwt_image_mask() + 
+    1000*test_mwt_image_contour() + 
+    10000*test_mwt_image_image() +
+    1000000*test_mwt_image_image8();
 }
 
 #ifdef UNIT_TEST_OWNER

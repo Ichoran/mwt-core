@@ -720,8 +720,8 @@ public:
   inline uint8_t view(int x,int y) const { return pixels[(y-bounds.near.y) + size.y*(x-bounds.near.x)]; }
   inline uint8_t view(Point p) const { return peek(p-bounds.near); }
   // "Vector" access to underlying data (packed in ints)
-  inline int& rareI(int x,int y) { return *((int*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
-  inline int viewI(int x,int y) const { return *((int*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  inline unsigned short& rareS(int x,int y) { return *((unsigned short*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  inline unsigned short viewS(int x,int y) const { return *((unsigned short*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
   // Access to data in global coordinates, with binning as needed
   inline uint8_t get(int x,int y) const {
     if (bin<=1) return peek(x-bounds.near.x,y-bounds.near.y);
@@ -761,16 +761,16 @@ public:
       for (q.x=0;q.x<bin;q.x++) for (q.y=0;q.y<bin;q.y++) raw(p+q) = I;
     }
   }
-  void set(Rectangle r,uint8_t I);
-  void set(Mask &m,uint8_t I);
-  void set(Contour& c,uint8_t I) {
+  void set(Rectangle r, uint8_t I);
+  void set(Mask &m, uint8_t I);
+  void set(Contour& c, uint8_t I) {
     Point p;
     Rectangle b = getBounds();
     c.start();
     while (c.advance()) { if (b.contains(c.i())) set( c.i() , I ); }
   }
-  void set(Point p1,Point p2,int width,uint8_t I); // Sets a line of specified radius (0=single pixel) from p1 up to but not including p2
-  void set(Contour &c,int width,uint8_t I);        // Draws a contour as lines--if contour is not made of adjacent pixels, it's still connected
+  void set(Point p1, Point p2, int width, uint8_t I); // Sets a line of specified radius (0=single pixel) from p1 up to but not including p2
+  void set(Contour &c, int width, uint8_t I);         // Draws a contour as lines--if contour is not made of adjacent pixels, it's still connected
   
   // Operations to shift and scale image by a constant
   inline Image8& operator=(uint8_t I) { for (int i=0;i<size.x*size.y;i++) pixels[i]=I; return *this; }
@@ -782,9 +782,9 @@ public:
   // Copy bits of one image to another in various ways
   void mimic(const Image8& source , Rectangle my_region , Rectangle source_region , ScaleType method = Subsample);
   void mimic(const Image8& source , ScaleType method = Subsample ) { mimic(source,getBounds(),source.getBounds(),method); }
-  void copy(Point where,const Image8& source,Point size,bool fix_depth=false);
-  void copy(const Image8& source,Mask& m,bool fix_depth=false);
-  void copy(const Image8& source,bool fix_depth=false) { copy( source.bounds.near , source , source.size , fix_depth ); }
+  void copy(Point where,const Image8& source,Point size);
+  void copy(const Image8& source,Mask& m);
+  void copy(const Image8& source) { copy( source.bounds.near , source , source.size , fix_depth ); }
   
   // Similar, except use 16 bit image as a source
   void mimic16(const Image& source , Rectangle my_region , Rectangle source_region , ScaleType method = Subsample);
