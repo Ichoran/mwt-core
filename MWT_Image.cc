@@ -1458,6 +1458,7 @@ void FloodData::duplicate(const FloodData& fd)
 // If the old image is binned, it gets a copy of the binned (not original) version
 Image::Image(const Image& existing,const Rectangle& region, bool algo) : bin(0),depth(existing.depth),divide_bg(algo)
 {
+  // WARNING!  You must keep this up to date with the 8 bit implementation BY HAND!!
   bounds = existing.getBounds();
   bounds.cropTo(region);
   if (bounds.isEmpty())
@@ -1479,6 +1480,7 @@ Image::Image(const Image& existing,const Rectangle& region, bool algo) : bin(0),
 // Draw rectangles on an image
 void Image::set(Rectangle r,short I)
 {
+  // WARNING!  You must keep this up to date with the 8 bit implementation BY HAND!!
   Point p;
   
   if (bin <= 1)
@@ -1502,6 +1504,7 @@ void Image::set(Rectangle r,short I)
 // Draw a mask onto an image
 void Image::set(Mask& m,short I)
 {
+  // WARNING!  You must keep this up to date with the 8 bit implementation BY HAND!!
   Point p;
   Rectangle b = getBounds();
   int x0,x1,y0,y1;
@@ -1537,6 +1540,7 @@ void Image::set(Mask& m,short I)
 // Draw lines on an image--not efficient for single pixel width, but works
 void Image::set(Point p1,Point p2,int width,short I)
 {
+  // WARNING!  You must keep this up to date with the 8 bit implementation BY HAND!!
   Rectangle r;
   
   if (width<1) return;
@@ -1628,6 +1632,7 @@ void Image::set(Point p1,Point p2,int width,short I)
 // Draw a contour as a bunch of line segments
 void Image::set(Contour& c,int width,short I)
 {
+  // WARNING!  You must keep this up to date with the 8 bit implementation BY HAND!!
   Point p0,p1,p2;
   c.first();
   p0 = p1 = c.i();
@@ -2149,7 +2154,7 @@ void Image::diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,i
             p[y] = ((1+(unsigned int)q[y])<<(source.depth+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
           }
         }
-	else
+        else
         {
           for (y=0;y<size.y-1;y+=2)  // Batch process with ints
           {
@@ -2685,12 +2690,193 @@ void Image::println() const
   printf("\n");
 }
 
-/* static */
-void Image::copy8to16(const unsigned char *in, int inStride, unsigned short *out, int outStride, int nx, int ny) {
-  for (int j = 0; j < ny; j++)
-    for (int i = 0; i < nx; i++)
-      out[j*outStride + i] = in[j*inStride + i];
+
+/****************************************************************
+                         Image8 Methods
+****************************************************************/
+
+
+// Make a new image8 that copies a rectangular region of another
+// If the old image8 is binned, it gets a copy of the binned (not original) version
+Image8::Image8(const Image8& existing, const Rectangle& region, bool algo) : bin(0),depth(existing.depth),divide_bg(algo)
+{
+  // WARNING!  You must keep this up to date with the 16 bit implementation BY HAND!!
+  bounds = existing.getBounds();
+  bounds.cropTo(region);
+  if (bounds.isEmpty()) {
+    pixels=NULL;
+    size=Point(0,0);
+    owns_pixels=false;
+    return;
+  }
+  
+  size = (bounds.far-bounds.near)+1;
+  pixels = new uint8_t[ bounds.area() ];
+  owns_pixels = true;
+  
+  copy(bounds.near , existing , size);
 }
+
+
+// Draw rectangles on an image8
+void Image8::set(Rectangle r, uint8_t I)
+{
+  // WARNING!  You must keep this up to date with the 16 bit implementation BY HAND!!
+  Point p;
+  
+  if (bin <= 1) {
+    if (!r.overlaps(bounds)) return;
+    r.cropTo(bounds);
+    r -= bounds.near;
+  }
+  else {
+    Rectangle s = getBounds();
+    if (!r.overlaps(s)) return;
+    r.cropTo(s);
+    r -= s.near;
+    r *= bin;
+    r.far += bin-1;
+  }
+  for (p.x=r.near.x ; p.x<=r.far.x ; p.x++) for (p.y=r.near.y ; p.y<=r.far.y ; p.y++) raw(p) = I;
+}
+
+
+// Draw a mask onto an Image8
+void Image8::set(Mask& m, uint8_t I)
+{
+  // WARNING!  You must keep this up to date with the 16 bit implementation BY HAND!!
+  Point p;
+  Rectangle b = getBounds();
+  int x0,x1,y0,y1;
+  m.start();
+  while (m.advance()) {
+    p.x = m.i().x;
+    if (p.x < b.near.x) continue;
+    if (p.x > b.far.x) break;
+    if (m.i().y1 < b.near.y || m.i().y0 > b.far.y) continue;
+    y0 = m.i().y0;
+    if (y0 < b.near.y) y0 = b.near.y;
+    y1 = m.i().y1;
+    if (y1 > b.far.y) y1 = b.far.y;
+    if (bin>1) {
+      x0 = p.x*bin;
+      x1 = x0 + bin - 1;
+      y0 *= bin;
+      y1 *= bin;
+      y1 += bin-1;
+      x0 -= bounds.near.x;
+      x1 -= bounds.near.x;
+      y0 -= bounds.near.y;
+      y1 -= bounds.near.y;
+      for (p.x=x0 ; p.x<=x1 ; p.x++) for (p.y=y0 ; p.y<=y1 ; p.y++) raw(p) = I;
+    }
+    else for (p.y = y0 ; p.y <= y1 ; p.y++) rare(p) = I;  
+  }
+}
+
+
+// Draw lines on an Image8--not efficient for single pixel width, but works
+void Image8::set(Point p1, Point p2, int width, uint8_t I)
+{
+  // WARNING!  You must keep this up to date with the 16 bit implementation BY HAND!!
+  Rectangle r;
+  
+  if (width<1) return; else width--;
+  
+  if (p1.x==p2.x || p1.y==p2.y) {   // Single pixel or single horizontal or vertical line; easy.
+    if (p1.x==p2.x)       r.near.x =         r.far.x = p1.x;
+    else if (p1.x<p2.x) { r.near.x = p1.x;   r.far.x = p2.x-1; }
+    else                { r.near.x = p2.x+1; r.far.x = p1.x; }
+    if (p1.y==p2.y)       r.near.y =         r.far.y = p1.y;
+    else if (p1.y<p2.y) { r.near.y = p1.y;   r.far.y = p2.y-1; }
+    else                { r.near.y = p2.y+1; r.far.y = p1.y; }
+    r.near -= width;
+    r.far += width;
+    set(r,I);
+  }
+  else {   // Diagonal, hard--draw a little rectangle of pixels around each point
+    r.near = p1;
+    r.far = p1;
+    r.expand(width);
+    set(r,I);
+    
+    Point p,px,pxy,py,q;
+    FPoint o_hat = FPoint(p2-p1).unit();  // Direction we want to go, dropping pixels as we do it
+    FPoint pf;
+    float fx,fxy,fy;
+    
+    // Figure out where we should go if we move only in X, only in Y, or in both X and Y (diagonal) this step
+    pxy.x = (o_hat.x<0) ? -1 : (o_hat.x>0) ? 1 : 0;
+    pxy.y = (o_hat.y<0) ? -1 : (o_hat.y>0) ? 1 : 0;
+    px.x = pxy.x;
+    px.y = 0;
+    py.x = 0;
+    py.y = pxy.y;
+    
+    q = p2-p1;
+    while (q*q > 2) {   // Farther than a diagonal to the last pixel--need to drop more pixels along the way
+      // Figure out if we have a better bearing after moving in X or in XY
+      pf = FPoint(p1+pxy).unit();
+      fxy = pf*o_hat;
+      pf = FPoint(p1+px).unit();
+      fx = pf*o_hat;
+      pf = FPoint(p1+py).unit();
+      if (fx > fxy) {  // X was better, move in x and drop line of pixels (rest of block is already filled)
+        r.near.x = r.far.x = p1.x+px.x*(width+1);
+        r.near.y = p1.y - width;
+        r.far.y = p1.y + width;
+        set(r,I);
+        p1 += px;
+      }
+      else {   // XY was better
+        // See if Y is better yet
+        pf = FPoint(p1+py).unit();
+        fy = pf*o_hat;
+        if (fy > fxy) {  // Yes, move in Y and drop line of pixels
+          r.near.y = r.far.y = p1.y+py.y*(width+1);
+          r.near.x = p1.x - width;
+          r.far.x = p1.x + width;
+          set(r,I);
+          p1 += py;
+        }
+        else {  // XY was the way to go after all
+          r.near.x = r.far.x = p1.x+pxy.x*(width+1);
+          r.near.y = p1.y - width + pxy.y;
+          r.far.y = p1.y + width + pxy.y;
+          set(r,I);
+          if (width>0) {   // Can't just drop a line, so drop a full block of pixels
+            r.near.y = r.far.y = p1.y+pxy.y*(width+1);
+            r.near.x = p1.x - width + pxy.x;
+            r.far.x = p1.x + width + pxy.x - 1;
+            set(r,I);
+          }
+          p1 += pxy;
+        }
+      }
+      q = p2-p1;
+    }
+  }
+}
+
+
+// Draw a contour as a bunch of line segments
+void Image8::set(Contour& c, int width, uint8_t I)
+{
+  // WARNING!  You must keep this up to date with the 16 bit implementation BY HAND!!
+  Point p0,p1,p2;
+  c.first();
+  p0 = p1 = c.i();
+  if (!c.next()) { set(p1,p1,width,I); return; }
+  p2 = c.i();
+  do {
+    set(p1,p2,width,I);
+    p1 = p2;
+    c.next();
+    p2 = c.i();
+  } while (p1!=p0);
+}
+
+
 
 
 /****************************************************************
