@@ -2450,14 +2450,14 @@ void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
 // Copy an image with background subtraction and gray offset and adapt the background
 void Image::diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,int rate)
 { 
+  // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int x,y;
   short gray = 1 << source.depth;
   short shift = (source.depth<bg.depth) ? bg.depth-source.depth : 0;
   short srcrate = rate - bg.depth + source.depth;  // Amount to bit shift each time we adapt
   bool sclz = false;  // Was srcrate less than zero?
   if (srcrate<0) { sclz=true; srcrate = -srcrate; }  // Yes, better use left shift instead of "negative right shift". 
-  if (bin <= 1 && source.bin <= 1 && bg.bin <= 1) // Fast shortcut--grab memory directly
-  {
+  if (bin <= 1 && source.bin <= 1 && bg.bin <= 1) { // Fast shortcut--grab memory directly
     // Variables for "vector" processing of two shorts at a time using ints
     int shiftmask = 0xFFFF>>shift;
     int ratemask = 0xFFFF>>rate;
@@ -2474,54 +2474,40 @@ void Image::diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,i
     short *p = pixels + (where.x*this->size.y + where.y);
     short *q = source.pixels + (swhere.x*source.size.y + swhere.y);
     short *g = bg.pixels + (bgwhere.x*bg.size.y + bgwhere.y);
-    if (sclz)  // Background is deep--need to shift foreground left even given adaptation rate
-    {
-      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g+= bg.size.y)
-      {
-        if (divide_bg)
-        {
-          for (y=0;y<size.y;y++)
-          { 
+    if (sclz) {  // Background is deep--need to shift foreground left even given adaptation rate
+      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g+= bg.size.y) {
+        if (divide_bg) {
+          for (y=0;y<size.y;y++) { 
             g[y] += (q[y]<<srcrate) - (g[y]>>rate);
             p[y] = ((1+(unsigned int)q[y])<<(source.depth+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
           }
         }
-        else
-        {
-          for (y=0;y<size.y-1;y+=2)  // Two at a time with ints
-          {
+        else {
+          for (y=0;y<size.y-1;y+=2) {  // Two at a time with ints
             *((int*)(g+y)) = *((int*)(g+y)) + ((*(int*)(q+y))<<srcrate) - (((*(int*)(g+y))>>rate)&dualratemask);
             *((int*)(p+y)) = (dualgray + *((int*)(q+y))) - (((*(int*)(g+y))>>shift)&dualshiftmask);
           }
-          for (;y<size.y;y++)  // Finish up with shorts (leave as for loop in case we switch to 64 bit mode and use long longs above)
-          {
+          for (;y<size.y;y++) { // Finish up with shorts (leave as for loop in case we switch to 64 bit mode and use long longs above)
             g[y] += (q[y]<<srcrate) - (g[y]>>rate);
             p[y] = q[y] - (g[y]>>shift) + gray;
           }
         }
       }
     }
-    else  // Need to shift foreground right before updating background.
-    {
-      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g+= bg.size.y)
-      {
-        if (divide_bg)
-        {
-          for (y=0;y<size.y;y++)
-          {
+    else { // Need to shift foreground right before updating background.
+      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g+= bg.size.y) {
+        if (divide_bg) {
+          for (y=0;y<size.y;y++) {
             g[y] += (q[y]>>srcrate) - (g[y]>>rate);
             p[y] = ((1+(unsigned int)q[y])<<(source.depth+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
           }
         }
-        else
-        {
-          for (y=0;y<size.y-1;y+=2)  // Batch process with ints
-          {
+        else {
+          for (y=0;y<size.y-1;y+=2) {  // Batch process with ints
             *((int*)(g+y)) = *((int*)(g+y)) + (((*(int*)(q+y))>>srcrate)&dualsrcratemask) - (((*(int*)(g+y))>>rate)&dualratemask);
             *((int*)(p+y)) = (dualgray + *((int*)(q+y))) - (((*(int*)(g+y))>>shift)&dualshiftmask);
           }
-          for (;y<size.y;y++)  // Finish with shorts
-          { 
+          for (;y<size.y;y++) { // Finish with shorts 
             g[y] += (q[y]>>srcrate) - (g[y]>>rate);
             p[y] = q[y] - (g[y]>>shift) + gray;
           }
@@ -2529,14 +2515,11 @@ void Image::diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,i
       }
     }
   }
-  else
-  {
+  else {
     short I,J;
     Point stop = where + size;
-    for (x=where.x;x<stop.x;x++)
-    {
-      for (y=where.y;y<stop.y;y++)
-      {
+    for (x=where.x;x<stop.x;x++) {
+      for (y=where.y;y<stop.y;y++) {
       	I = bg.get(x,y);
       	J = source.get(x,y);
       	if (srcrate==0) I += J - (I>>rate);
@@ -2553,7 +2536,7 @@ void Image::diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,i
 // Same thing except copy using a mask
 void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate)
 {
-  // Basic variables
+  // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int y,y0,y1;
   int x,I_fg;
   short gray = 1 << source.depth;
@@ -2563,8 +2546,7 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate)
   if (srcrate<0) { sclz=true; srcrate = -srcrate; }
   
   
-  if (bin<=1 && source.bin<=1 && bg.bin<=1)
-  {
+  if (bin<=1 && source.bin<=1 && bg.bin<=1) {
     // Variables for "vector" processing of two shorts at a time using ints
     int shiftmask = 0xFFFF>>shift;
     int ratemask = 0xFFFF>>rate;
@@ -2577,59 +2559,46 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate)
     Rectangle safe = bounds * source.bounds * bg.bounds;
     
     m.start();
-    while (m.advance())
-    {
+    while (m.advance()) {
       if (m.i().beyond( safe.far )) break;
       if (m.i().before( safe.near )) continue;
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0>y1) continue;
       x = m.i().x;
-      if (sclz)
-      {
-        if (divide_bg)
-        {
-          for (y=y0;y<=y1;y++)
-          {
+      if (sclz) {
+        if (divide_bg) {
+          for (y=y0;y<=y1;y++) {
             bg.rare(x,y) += (source.view(x,y)<<srcrate) - (bg.rare(m.i().x,y)>>rate);
             I_fg = 1+(unsigned int)source.view(x,y);
             rare(x,y) = (I_fg<<(source.depth+1)) / ( 1 + I_fg + (unsigned int)(bg.rare(x,y)>>shift) );
           }
         }
-	else
-        {
-          for (y=y0;y<y1;y+=2) // "Vector" mode
-          {
+        else {
+          for (y=y0;y<y1;y+=2) { // "Vector" mode
             bg.rareI(x,y) = (bg.rareI(x,y) + (source.viewI(x,y)<<srcrate)) - ((bg.rareI(x,y)>>rate)&dualratemask);
             rareI(x,y) = (dualgray + source.viewI(x,y)) - ((bg.rareI(x,y)>>shift)&dualshiftmask);
           }
-          for (;y<=y1;y++) // Individual mode to finish any danglers on the end
-	  {
-	    bg.rare(x,y) += (source.view(x,y)<<srcrate) - (bg.rare(x,y)>>rate);
-	    rare(x,y) = source.view(x,y) - (bg.rare(x,y)>>shift) + gray;
+          for (;y<=y1;y++) { // Individual mode to finish any danglers on the end
+      	    bg.rare(x,y) += (source.view(x,y)<<srcrate) - (bg.rare(x,y)>>rate);
+	          rare(x,y) = source.view(x,y) - (bg.rare(x,y)>>shift) + gray;
           }
-	}
+      	}
       }
-      else
-      {
-        if (divide_bg)
-        {
-          for (y=y0;y<=y1;y++)
-	  {
-	    bg.rare(m.i().x,y) += (source.view(m.i().x,y)>>srcrate) - (bg.rare(m.i().x,y)>>rate);
+      else {
+        if (divide_bg) {
+          for (y=y0;y<=y1;y++) {
+            bg.rare(m.i().x,y) += (source.view(m.i().x,y)>>srcrate) - (bg.rare(m.i().x,y)>>rate);
             I_fg = 1+(unsigned int)source.view(m.i().x,y);
             rare(m.i().x,y) = (I_fg<<(source.depth+1)) / ( 1 + I_fg + (unsigned int)(bg.rare(m.i().x,y)>>shift) );
           }
         }
-	else
-        {
-          for (y=y0;y<y1;y+=2) // "Vector" mode
-          {
+        else {
+          for (y=y0;y<y1;y+=2) { // "Vector" mode
             bg.rareI(x,y) = (bg.rareI(x,y) + ((source.viewI(x,y)>>srcrate)&dualsrcratemask)) - ((bg.rareI(x,y)>>rate)&dualratemask);
             rareI(x,y) = (dualgray + source.viewI(x,y)) - ((bg.rareI(x,y)>>shift)&dualshiftmask);
           }
-          for (;y<=y1;y++) // Finish danglers
-          {
+          for (;y<=y1;y++) { // Finish danglers
             bg.rare(m.i().x,y) += (source.view(m.i().x,y)>>srcrate) - (bg.rare(m.i().x,y)>>rate);
             rare(m.i().x,y) = source.view(m.i().x,y) - (bg.rare(m.i().x,y)>>shift) + gray;
           }
@@ -2637,23 +2606,19 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate)
       }
     }
   }
-  else
-  {
+  else {
     short I,J;
     Rectangle safe = getBounds() * source.getBounds() * bg.getBounds();
     m.start();
-    while (m.advance())
-    {
+    while (m.advance()) {
       if (m.i().beyond( safe.far )) break;
       if (m.i().before( safe.near )) continue;
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0 > y1) continue;
       
-      if (sclz)
-      {
-        for (y=y0;y<=y1;y++)
-        {
+      if (sclz) {
+        for (y=y0;y<=y1;y++) {
           I = bg.get(m.i().x,y);
           J = source.get(m.i().x,y);
           I += (J<<srcrate) - (I>>rate);
@@ -2662,10 +2627,210 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate)
           else set(m.i().x , y , J - (I>>shift) + gray );
         }
       }
-      else
-      {
-        for (y=y0;y<=y1;y++)
-        {
+      else {
+        for (y=y0;y<=y1;y++) {
+          I = bg.get(m.i().x,y);
+          J = source.get(m.i().x,y);
+          I += (J>>srcrate) - (I>>rate);
+          bg.set(m.i().x,y,I);
+          if (divide_bg) set(m.i().x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
+          else set(m.i().x , y , J - (I>>shift) + gray );
+        }
+      }
+    }
+  }
+}
+
+
+// Copy an image with background subtraction and gray offset and adapt the background
+void Image::diffAdaptCopy8(Point where, const Image8& source, Point size, Image& bg, int rate)
+{ 
+  // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
+  int x,y;
+  short gray = 1 << 8;
+  short shift = (8<bg.depth) ? bg.depth-8 : 0;
+  short srcrate = rate - bg.depth + 8;  // Amount to bit shift each time we adapt
+  bool sclz = false;  // Was srcrate less than zero?
+  if (srcrate<0) { sclz=true; srcrate = -srcrate; }  // Yes, better use left shift instead of "negative right shift". 
+  if (bin <= 1 && source.bin <= 1 && bg.bin <= 1) { // Fast shortcut--grab memory directly
+    // Variables for "vector" processing of two shorts at a time using ints
+    int shiftmask = 0xFFFF>>shift;
+    int ratemask = 0xFFFF>>rate;
+    int srcratemask = (sclz) ? 0 : ((0xFFFF>>srcrate)&0xFFFF);
+    int dualgray = ((int)gray) | (((int)gray)<<16);
+    int dualshiftmask = shiftmask | (shiftmask<<16);
+    int dualratemask = ratemask | (ratemask<<16);
+    int dualsrcratemask = srcratemask | (srcratemask<<16);
+    
+    // Other task-specific variables
+    Point swhere = where-source.bounds.near;
+    Point bgwhere = where - bg.bounds.near;
+    where -= bounds.near;
+    short *p = pixels + (where.x*this->size.y + where.y);
+    short *q = source.pixels + (swhere.x*source.size.y + swhere.y);
+    short *g = bg.pixels + (bgwhere.x*bg.size.y + bgwhere.y);
+    if (sclz) {  // Background is deep--need to shift foreground left even given adaptation rate
+      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g+= bg.size.y) {
+        if (divide_bg) {
+          for (y=0;y<size.y;y++) { 
+            g[y] += (((short)q[y])<<srcrate) - (g[y]>>rate);
+            p[y] = ((1+(unsigned int)q[y])<<(source.depth+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
+          }
+        }
+        else {
+          for (y=0;y<size.y-1;y+=2) {  // Two at a time with ints
+            uint16_t qy = *((uint16_t*)(q+y));
+            int qq = (((int)(qy & 0xFF00)) << 8) | (qy & 0xFF);
+            *((int*)(g+y)) = *((int*)(g+y)) + (qq<<srcrate) - (((*(int*)(g+y))>>rate)&dualratemask);
+            *((int*)(p+y)) = (dualgray + qq) - (((*(int*)(g+y))>>shift)&dualshiftmask);
+          }
+          for (;y<size.y;y++) { // Finish up with shorts (leave as for loop in case we switch to 64 bit mode and use long longs above)
+            g[y] += (((short)q[y])<<srcrate) - (g[y]>>rate);
+            p[y] = q[y] - (g[y]>>shift) + gray;
+          }
+        }
+      }
+    }
+    else { // Need to shift foreground right before updating background.
+      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g+= bg.size.y) {
+        if (divide_bg) {
+          for (y=0;y<size.y;y++) {
+            g[y] += (((short)q[y])>>srcrate) - (g[y]>>rate);
+            p[y] = ((1+(unsigned int)q[y])<<(source.depth+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
+          }
+        }
+        else {
+          for (y=0;y<size.y-1;y+=2) {  // Batch process with ints
+            uint16_t qy = *((uint16_t*)(q+y));
+            int qq = (((int)(qy & 0xFF00)) << 8) | (qy & 0xFF);
+            *((int*)(g+y)) = *((int*)(g+y)) + ((qq>>srcrate)&dualsrcratemask) - (((*(int*)(g+y))>>rate)&dualratemask);
+            *((int*)(p+y)) = (dualgray + qq) - (((*(int*)(g+y))>>shift)&dualshiftmask);
+          }
+          for (;y<size.y;y++) { // Finish with shorts 
+            g[y] += (((short)q[y])>>srcrate) - (g[y]>>rate);
+            p[y] = ((short)q[y]) - (g[y]>>shift) + gray;
+          }
+        }
+      }
+    }
+  }
+  else {
+    short I,J;
+    Point stop = where + size;
+    for (x=where.x;x<stop.x;x++) {
+      for (y=where.y;y<stop.y;y++) {
+        I = bg.get(x,y);
+        J = source.get(x,y);
+        if (srcrate==0) I += J - (I>>rate);
+        else if (sclz) I += (J<<srcrate) - (I>>rate);
+        else I += (J>>srcrate) - (I>>rate);
+        bg.set(x,y,I);
+        if (divide_bg) set(x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
+        else set(x,y , J - (I>>shift) + gray);
+      }
+    }
+  }
+}
+
+// Same thing except copy using a mask
+void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
+{
+  // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
+  int y,y0,y1;
+  int x,I_fg;
+  short gray = 1 << source.depth;
+  short shift = (source.depth<bg.depth) ? bg.depth-source.depth : 0;
+  short srcrate = rate - bg.depth + source.depth;
+  bool sclz = false;
+  if (srcrate<0) { sclz=true; srcrate = -srcrate; }
+  
+  if (bin<=1 && source.bin<=1 && bg.bin<=1) {
+    // Variables for "vector" processing of two shorts at a time using ints
+    int shiftmask = 0xFFFF>>shift;
+    int ratemask = 0xFFFF>>rate;
+    int srcratemask = (sclz) ? 0 : ((0xFFFF>>srcrate)&0xFFFF);
+    int dualgray = ((int)gray) | (((int)gray)<<16);
+    int dualshiftmask = shiftmask | (shiftmask<<16);
+    int dualratemask = ratemask | (ratemask<<16);
+    int dualsrcratemask = srcratemask | (srcratemask<<16);  
+  
+    Rectangle safe = bounds * source.bounds * bg.bounds;
+    
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0>y1) continue;
+      x = m.i().x;
+      if (sclz) {
+        if (divide_bg) {
+          for (y=y0;y<=y1;y++) {
+            bg.rare(x,y) += (((short)source.view(x,y))<<srcrate) - (bg.rare(m.i().x,y)>>rate);
+            I_fg = 1+(unsigned int)source.view(x,y);
+            rare(x,y) = (I_fg<<(source.depth+1)) / ( 1 + I_fg + (unsigned int)(bg.rare(x,y)>>shift) );
+          }
+        }
+        else {
+          for (y=y0;y<y1;y+=2) { // "Vector" mode
+            val sy = source.viewS(x,y);
+            val iyy = (((int)(sy & 0xFF00)) << 8) | (sy & 0xFF);
+            bg.rareI(x,y) = (bg.rareI(x,y) + (iyy<<srcrate)) - ((bg.rareI(x,y)>>rate)&dualratemask);
+            rareI(x,y) = (dualgray + iyy) - ((bg.rareI(x,y)>>shift)&dualshiftmask);
+          }
+          for (;y<=y1;y++) { // Individual mode to finish any danglers on the end
+            bg.rare(x,y) += (((short)source.view(x,y))<<srcrate) - (bg.rare(x,y)>>rate);
+            rare(x,y) = ((short)source.view(x,y)) - (bg.rare(x,y)>>shift) + gray;
+          }
+        }
+      }
+      else {
+        if (divide_bg) {
+          for (y=y0;y<=y1;y++) {
+            bg.rare(m.i().x,y) += (((short)source.view(m.i().x,y))>>srcrate) - (bg.rare(m.i().x,y)>>rate);
+            I_fg = 1+(unsigned int)source.view(m.i().x,y);
+            rare(m.i().x,y) = (I_fg<<(source.depth+1)) / ( 1 + I_fg + (unsigned int)(bg.rare(m.i().x,y)>>shift) );
+          }
+        }
+        else {
+          for (y=y0;y<y1;y+=2) { // "Vector" mode
+            val sy = source.viewS(x,y);
+            val iyy = (((int)(sy & 0xFF00)) << 8) | (sy & 0xFF);
+            bg.rareI(x,y) = (bg.rareI(x,y) + ((iyy>>srcrate)&dualsrcratemask)) - ((bg.rareI(x,y)>>rate)&dualratemask);
+            rareI(x,y) = (dualgray + iyy) - ((bg.rareI(x,y)>>shift)&dualshiftmask);
+          }
+          for (;y<=y1;y++) { // Finish danglers
+            bg.rare(m.i().x,y) += (((short)source.view(m.i().x,y))>>srcrate) - (bg.rare(m.i().x,y)>>rate);
+            rare(m.i().x,y) = ((short)source.view(m.i().x,y)) - (bg.rare(m.i().x,y)>>shift) + gray;
+          }
+        }
+      }
+    }
+  }
+  else {
+    short I,J;
+    Rectangle safe = getBounds() * source.getBounds() * bg.getBounds();
+    m.start();
+    while (m.advance()) {
+      if (m.i().beyond( safe.far )) break;
+      if (m.i().before( safe.near )) continue;
+      y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
+      y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
+      if (y0 > y1) continue;
+      
+      if (sclz) {
+        for (y=y0;y<=y1;y++) {
+          I = bg.get(m.i().x,y);
+          J = source.get(m.i().x,y);
+          I += (J<<srcrate) - (I>>rate);
+          bg.set(m.i().x,y,I);
+          if (divide_bg) set(m.i().x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
+          else set(m.i().x , y , J - (I>>shift) + gray );
+        }
+      }
+      else {
+        for (y=y0;y<=y1;y++) {
           I = bg.get(m.i().x,y);
           J = source.get(m.i().x,y);
           I += (J>>srcrate) - (I>>rate);
