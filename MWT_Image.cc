@@ -1828,6 +1828,9 @@ void Image::mimic8(const Image8& source, Rectangle my_region, Rectangle source_r
   }
   // No else clause--just do nothing for invalid image rescaling method
 }
+void Image::mimic8(const Image8& source , ScaleType method) { 
+  mimic8(source,getBounds(),source.getBounds(),method); 
+}
 
 
 
@@ -1950,7 +1953,7 @@ void Image::copy8(Point where, const Image8& source, Point size, bool fix_depth)
 { 
   // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
   int x,y;
-  if (depth == source.depth) fix_depth = false;
+  if (depth == 8) fix_depth = false;
   if (bin <= 1 && source.bin <= 1) { // Fast shortcut--grab memory directly
     Point swhere = where - source.bounds.near;
     where -= bounds.near;
@@ -1964,7 +1967,7 @@ void Image::copy8(Point where, const Image8& source, Point size, bool fix_depth)
       for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = ((short)q[y])<<shift;
     }
     else { // depth < source.depth
-      short shift = source.depth - depth;
+      short shift = 8 - depth;
       for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = ((short)q[y])>>shift;      
     }
   }
@@ -1975,19 +1978,23 @@ void Image::copy8(Point where, const Image8& source, Point size, bool fix_depth)
       if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = source.get(x,y);
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , source.get(x,y));
     }
-    else if (depth > source.depth) {
+    else if (depth > 8) {
       short shift = depth - 8;
       if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = ((short)source.get(x,y))<<shift;
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , ((short)source.get(x,y))<<shift);
     }
-    else // depth < source.depth
+    else // depth < 8
     {
-      short shift = 8h - depth;
+      short shift = 8 - depth;
       if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = ((short)source.get(x,y))>>shift;
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , ((short)source.get(x,y))>>shift);
     }
   }
 }
+void Image::copy8(const Image8& source, bool fix_depth) { 
+  copy8( source.bounds.near , source , source.size , fix_depth );
+}
+
 
 // Same thing except copy using a mask
 void Image::copy8(const Image8& source, Mask& m, bool fix_depth)
@@ -1995,7 +2002,7 @@ void Image::copy8(const Image8& source, Mask& m, bool fix_depth)
   // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
   int y,y0,y1;
   
-  if (depth==source.depth) fix_depth = false;
+  if (depth==8) fix_depth = false;
   
   if (bin<=1 && source.bin<=1) {
     Rectangle safe = bounds * source.bounds;
@@ -2006,9 +2013,9 @@ void Image::copy8(const Image8& source, Mask& m, bool fix_depth)
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0<=y1) {
-        if (!fix_depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.view(m.i().x,y);
-        else if (depth>source.depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.view(m.i().x,y))<<(depth-8);
-        else /*depth<source.depth*/ for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.view(m.i().x,y))>>(8-depth);
+        if (!fix_depth)   for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.view(m.i().x,y);
+        else if (depth>8) for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.view(m.i().x,y))<<(depth-8);
+        else /*depth<8*/  for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.view(m.i().x,y))>>(8-depth);
       }
     }
   }
@@ -2335,14 +2342,15 @@ void Image::diffCopy8(Point where, const Image8& source, Point size, const Image
     Point bgwhere = where - bg.bounds.near;
     where -= bounds.near;
     short *p = pixels + (where.x*this->size.y + where.y);
-    short *q = source.pixels + (swhere.x*source.size.y + swhere.y);
+    uint8_t *q = source.pixels + (swhere.x*source.size.y + swhere.y);
     short *g = bg.pixels + (bgwhere.x*bg.size.y + bgwhere.y);
     
     if (divide_bg) { // This is 2*fg/(fg+bg) . . . slower but better for large changes in background!
-      int divshift = source_depth + 1
+      int divshift = bg.depth + 1;
       for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) for (y=0;y<size.y;y++) {
-        val qq = 1 + ((unsigned int) q[y])<<shift;
-          p[y] = (qq << divshift) / (qq + (unsigned int)g[y] + 1);
+        unsigned int qq = 1 + (((unsigned int) q[y]) << shift);
+        p[y] = (qq << divshift) / (qq + (unsigned int)g[y] + 1);
+      }
     }          
     else { // This is just fg-bg . . . fast!  (Even faster when we use an int to do two short operations at once.)
       for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) {
@@ -2358,14 +2366,13 @@ void Image::diffCopy8(Point where, const Image8& source, Point size, const Image
   else {
     Point stop = where + size;
     if (divide_bg) {
-      int divshift = source_depth + 1
-      register unsigned int I_fg;
+      int divshift = bg.depth + 1;
       if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
-        I_fg = 1 + (((unsigned int)source.get(x,y)) << shift);
+        unsigned int I_fg = 1 + (((unsigned int)source.get(x,y)) << shift);
         rare(x,y) = (I_fg<<divshift) / (1 + I_fg + bg.get(x,y));
       }
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
-        I_fg = 1 + (((unsigned int)source.get(x,y)) << shift);
+        unsigned int I_fg = 1 + (((unsigned int)source.get(x,y)) << shift);
         set(x,y , (I_fg<<divshift) / (1 + I_fg + bg.get(x,y)) );
       }
     }
@@ -2386,8 +2393,8 @@ void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
   // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
   int y,y0,y1;
   unsigned int I_fg;
-  short gray = 1 << source.depth;
-  short shift = (source.depth<bg.depth) ? bg.depth-source.depth : 0;
+  short gray = 1 << bg.depth;
+  short shift = (bg.depth > 8) ? bg.depth-8 : 0;
   if (bin<=1 && source.bin<=1) {
     int dualgray = ((int)gray) | (((int)gray)<<16);
 
@@ -2400,7 +2407,7 @@ void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0<=y1) {
         if (divide_bg) {
-          int divshift = source.depth + 1;
+          int divshift = bg.depth + 1;
           for (y=y0;y<=y1;y++) {
             I_fg = 1 + (((unsigned int)source.view(m.i().x,y)) << shift);
             rare(m.i().x,y) = (I_fg<<divshift) / (1 + I_fg + (unsigned int)(bg.view(m.i().x,y)));
@@ -2427,7 +2434,7 @@ void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0<=y1) {
         if (divide_bg) {
-          int divshift = source.depth + 1;
+          int divshift = bg.depth + 1;
           if (bin<=1) for (y=y0;y<=y1;y++) {
             I_fg = 1 + (((unsigned int)source.get(m.i().x,y)) << shift);
             rare(m.i().x,y) = (I_fg<<divshift)/(1 + I_fg + (unsigned int)bg.get(m.i().x,y));
@@ -2667,14 +2674,14 @@ void Image::diffAdaptCopy8(Point where, const Image8& source, Point size, Image&
     Point bgwhere = where - bg.bounds.near;
     where -= bounds.near;
     short *p = pixels + (where.x*this->size.y + where.y);
-    short *q = source.pixels + (swhere.x*source.size.y + swhere.y);
+    uint8_t *q = source.pixels + (swhere.x*source.size.y + swhere.y);
     short *g = bg.pixels + (bgwhere.x*bg.size.y + bgwhere.y);
     if (sclz) {  // Background is deep--need to shift foreground left even given adaptation rate
       for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g+= bg.size.y) {
         if (divide_bg) {
           for (y=0;y<size.y;y++) { 
             g[y] += (((short)q[y])<<srcrate) - (g[y]>>rate);
-            p[y] = ((1+(unsigned int)q[y])<<(source.depth+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
+            p[y] = ((1+(unsigned int)q[y])<<(8+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
           }
         }
         else {
@@ -2696,7 +2703,7 @@ void Image::diffAdaptCopy8(Point where, const Image8& source, Point size, Image&
         if (divide_bg) {
           for (y=0;y<size.y;y++) {
             g[y] += (((short)q[y])>>srcrate) - (g[y]>>rate);
-            p[y] = ((1+(unsigned int)q[y])<<(source.depth+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
+            p[y] = ((1+(unsigned int)q[y])<<(8+1)) / (2 + (unsigned int)q[y] + (unsigned int)(g[y]>>shift));
           }
         }
         else {
@@ -2725,7 +2732,7 @@ void Image::diffAdaptCopy8(Point where, const Image8& source, Point size, Image&
         else if (sclz) I += (J<<srcrate) - (I>>rate);
         else I += (J>>srcrate) - (I>>rate);
         bg.set(x,y,I);
-        if (divide_bg) set(x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
+        if (divide_bg) set(x,y , ((1+(unsigned int)J)<<(8+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
         else set(x,y , J - (I>>shift) + gray);
       }
     }
@@ -2738,9 +2745,9 @@ void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
   // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int y,y0,y1;
   int x,I_fg;
-  short gray = 1 << source.depth;
-  short shift = (source.depth<bg.depth) ? bg.depth-source.depth : 0;
-  short srcrate = rate - bg.depth + source.depth;
+  short gray = 1 << 8;
+  short shift = (8<bg.depth) ? bg.depth-8 : 0;
+  short srcrate = rate - bg.depth + 8;
   bool sclz = false;
   if (srcrate<0) { sclz=true; srcrate = -srcrate; }
   
@@ -2769,13 +2776,13 @@ void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
           for (y=y0;y<=y1;y++) {
             bg.rare(x,y) += (((short)source.view(x,y))<<srcrate) - (bg.rare(m.i().x,y)>>rate);
             I_fg = 1+(unsigned int)source.view(x,y);
-            rare(x,y) = (I_fg<<(source.depth+1)) / ( 1 + I_fg + (unsigned int)(bg.rare(x,y)>>shift) );
+            rare(x,y) = (I_fg<<(8+1)) / ( 1 + I_fg + (unsigned int)(bg.rare(x,y)>>shift) );
           }
         }
         else {
           for (y=y0;y<y1;y+=2) { // "Vector" mode
-            val sy = source.viewS(x,y);
-            val iyy = (((int)(sy & 0xFF00)) << 8) | (sy & 0xFF);
+            uint16_t sy = source.viewS(x,y);
+            int iyy = (((int)(sy & 0xFF00)) << 8) | (sy & 0xFF);
             bg.rareI(x,y) = (bg.rareI(x,y) + (iyy<<srcrate)) - ((bg.rareI(x,y)>>rate)&dualratemask);
             rareI(x,y) = (dualgray + iyy) - ((bg.rareI(x,y)>>shift)&dualshiftmask);
           }
@@ -2790,13 +2797,13 @@ void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
           for (y=y0;y<=y1;y++) {
             bg.rare(m.i().x,y) += (((short)source.view(m.i().x,y))>>srcrate) - (bg.rare(m.i().x,y)>>rate);
             I_fg = 1+(unsigned int)source.view(m.i().x,y);
-            rare(m.i().x,y) = (I_fg<<(source.depth+1)) / ( 1 + I_fg + (unsigned int)(bg.rare(m.i().x,y)>>shift) );
+            rare(m.i().x,y) = (I_fg<<(8+1)) / ( 1 + I_fg + (unsigned int)(bg.rare(m.i().x,y)>>shift) );
           }
         }
         else {
           for (y=y0;y<y1;y+=2) { // "Vector" mode
-            val sy = source.viewS(x,y);
-            val iyy = (((int)(sy & 0xFF00)) << 8) | (sy & 0xFF);
+            uint8_t sy = source.viewS(x,y);
+            int iyy = (((int)(sy & 0xFF00)) << 8) | (sy & 0xFF);
             bg.rareI(x,y) = (bg.rareI(x,y) + ((iyy>>srcrate)&dualsrcratemask)) - ((bg.rareI(x,y)>>rate)&dualratemask);
             rareI(x,y) = (dualgray + iyy) - ((bg.rareI(x,y)>>shift)&dualshiftmask);
           }
@@ -2825,7 +2832,7 @@ void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
           J = source.get(m.i().x,y);
           I += (J<<srcrate) - (I>>rate);
           bg.set(m.i().x,y,I);
-          if (divide_bg) set(m.i().x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
+          if (divide_bg) set(m.i().x,y , ((1+(unsigned int)J)<<(8+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
           else set(m.i().x , y , J - (I>>shift) + gray );
         }
       }
@@ -2835,7 +2842,7 @@ void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
           J = source.get(m.i().x,y);
           I += (J>>srcrate) - (I>>rate);
           bg.set(m.i().x,y,I);
-          if (divide_bg) set(m.i().x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
+          if (divide_bg) set(m.i().x,y , ((1+(unsigned int)J)<<(8+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
           else set(m.i().x , y , J - (I>>shift) + gray );
         }
       }
@@ -3222,7 +3229,7 @@ void Image::println() const
 
 // Make a new image8 that copies a rectangular region of another
 // If the old image8 is binned, it gets a copy of the binned (not original) version
-Image8::Image8(const Image8& existing, const Rectangle& region, bool algo) : bin(0),depth(existing.depth),divide_bg(algo)
+Image8::Image8(const Image8& existing, const Rectangle& region, bool algo) : bin(0),divide_bg(algo)
 {
   // WARNING!  You must keep this up to date with the 16 bit implementation BY HAND!!
   bounds = existing.getBounds();
@@ -3581,7 +3588,6 @@ void Image8::mimic16(const Image& source, Rectangle my_region, Rectangle source_
 void Image8::copy(Point where, const Image8& source, Point size)
 { 
   int x,y;
-  if (8 == source.depth) fix_depth = false;
   if (bin <= 1 && source.bin <= 1) { // Fast shortcut--grab memory directly
     Point swhere = where - source.bounds.near;
     where -= bounds.near;
@@ -3601,8 +3607,6 @@ void Image8::copy(const Image8& source, Mask& m)
 {
   int y,y0,y1;
   
-  if (8 == source.depth) fix_depth = false;
-  
   if (bin<=1 && source.bin<=1) {
     Rectangle safe = bounds * source.bounds;
     m.start();
@@ -3611,9 +3615,7 @@ void Image8::copy(const Image8& source, Mask& m)
       if (m.i().before( safe.near )) continue;
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
-      if (y0<=y1) {
-        rare(m.i().x,y) = source.view(m.i().x,y);
-      }
+      if (y0<=y1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.view(m.i().x,y);
     }
   }
   else {
@@ -3645,8 +3647,8 @@ void Image8::copy16(Point where, const Image& source, Point size, bool fix_depth
     if (!fix_depth) {
       for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = (uint8_t)q[y];
     }
-    else if (source_depth < 8) {
-      short shift = 8 - source_depth;
+    else if (source.depth < 8) {
+      short shift = 8 - source.depth;
       for (x=0 ; x<size.x ; x++, q += source.size.y, p += this->size.y) for (y=0; y<size.y; y++) p[y] = (uint8_t)(q[y]<<shift);
     }
     else { // source.depth > 8
@@ -3691,8 +3693,8 @@ void Image8::copy16(const Image& source, Mask& m, bool fix_depth)
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0<=y1) {
         if (!fix_depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)source.view(m.i().x,y);
-        else if (depth>source.depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.view(m.i().x,y)<<(depth-8));
-        else /*depth<source.depth*/ for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.view(m.i().x,y)>>(8-depth));
+        else if (8 > source.depth) for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.view(m.i().x,y)<<(8 - source.depth));
+        else /*8 < source.depth*/ for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.view(m.i().x,y)>>(source.depth - 8));
       }
     }
   }
@@ -3716,7 +3718,7 @@ void Image8::copy16(const Image& source, Mask& m, bool fix_depth)
         }
         else // source.depth > 8
         {
-          short shift = 8 - depth;
+          short shift = source.depth - 8;
           if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = (uint8_t)(source.get(m.i().x,y)>>shift);
           else for (y=y0;y<=y1;y++) set(m.i().x , y , (uint8_t)(source.get(m.i().x,y)>>shift) );          
         }
@@ -3816,24 +3818,6 @@ void Image8::println() const
 /****************************************************************
                     Unit Test-Style Functions
 ****************************************************************/
-
-int test_static_image_copy() {
-  unsigned char *in = (unsigned char*)malloc(36);
-  unsigned short *out = (unsigned short*)malloc(20*2);
-  for (int ii = 0; ii < 36; ii++) in[ii] = ii;
-  for (int oi = 0; oi < 20; oi++) out[oi] = 0;
-  Image::copy8to16(in, 6, out, 4, 3, 4);
-  for (int y = 0; y < 5; y++) {
-    for (int x = 0; x < 4; x++) {
-      int ko = 4*y + x;
-      int ki = 6*y + x;
-      if (y >= 4) { if (out[ko] != 0) return 1; }
-      else if (x >= 3) { if (out[ko] != 0) return 2; }
-      else if (out[ko] != in[ki]) return 3;
-    }
-  }
-  return 0;
-}
 
 int test_mwt_image_strip()
 {

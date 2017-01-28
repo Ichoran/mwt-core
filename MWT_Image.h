@@ -434,6 +434,9 @@ public:
 ** HOWTO */
  
 // Holds image data (as shorts), optionally with binning
+
+class Image8; // Forward declaration of 8-bit images (needed so we can use them)
+
 class Image
 {
 public:
@@ -600,10 +603,10 @@ public:
 
   // Same as above but using 8 bit images as a source
   void mimic8(const Image8& source , Rectangle my_region , Rectangle source_region , ScaleType method = Subsample);
-  void mimic8(const Image8& source , ScaleType method = Subsample ) { mimic(source,getBounds(),source.getBounds(),method); }
+  void mimic8(const Image8& source , ScaleType method = Subsample );
   void copy8(Point where,const Image8& source,Point size,bool fix_depth=false);
   void copy8(const Image8& source,Mask& m,bool fix_depth=false);
-  void copy8(const Imag8e& source,bool fix_depth=false) { copy( source.bounds.near , source , source.size , fix_depth ); }
+  void copy8(const Image8& source,bool fix_depth=false);
   void adapt8(Point where,const Image8& im,Point size,int rate); // Adapting image has deeper bit depth
   void adapt8(const Image8& im,Mask &m,int rate);
   void diffCopy8(Point where,const Image8& source,Point size,const Image& bg);  // Diffcopied image is effectively one bit deeper than source, bg is much deeper
@@ -656,31 +659,30 @@ public:
   Point size;
   
   short bin;
-  short depth;
   bool owns_pixels;
   
   bool divide_bg; 
 
   // Creating and disposing of images
-  Image8() : pixels(NULL),bounds(),size(0,0),bin(0),depth(DEFAULT_BIT_DEPTH),owns_pixels(false),divide_bg(false) { }
+  Image8() : pixels(NULL),bounds(),size(0,0),bin(0),owns_pixels(false),divide_bg(false) { }
   Image8(uint8_t *raw_image,Point image_size, bool algo)
     : pixels(raw_image),bounds(Point(0,0),image_size-1),size(image_size),
-      bin(0),depth(DEFAULT_BIT_DEPTH),owns_pixels(false),divide_bg(algo) { }
-  Image8(Point image_size, bool algo) : size(image_size),bin(0),depth(DEFAULT_BIT_DEPTH),owns_pixels(true),divide_bg(algo)
+      bin(0),owns_pixels(false),divide_bg(algo) { }
+  Image8(Point image_size, bool algo) : size(image_size),bin(0),owns_pixels(true),divide_bg(algo)
   {
     if (size.x<1) size.x=1;
     if (size.y<1) size.y=1;
     bounds = Rectangle(Point(0,0),size-1);
     pixels = new uint8_t[ bounds.area() ];
   }
-  Image8(Rectangle image_bounds, bool algo) : bounds(image_bounds),bin(0),depth(DEFAULT_BIT_DEPTH),owns_pixels(true),divide_bg(algo)
+  Image8(Rectangle image_bounds, bool algo) : bounds(image_bounds),bin(0),owns_pixels(true),divide_bg(algo)
   {
     if (bounds.near.x > bounds.far.x) bounds.far.x = bounds.near.x;
     if (bounds.near.y > bounds.far.y) bounds.far.y = bounds.near.y;
     size = bounds.size();
     pixels = new uint8_t[ bounds.area() ];
   }
-  Image8(const Image& existing,const Rectangle &region, bool algo);
+  Image8(const Image8& existing,const Rectangle &region, bool algo);
   ~Image8()
   {
     if (owns_pixels && pixels!=NULL) { delete[] pixels; pixels=NULL; }
@@ -784,14 +786,14 @@ public:
   void mimic(const Image8& source , ScaleType method = Subsample ) { mimic(source,getBounds(),source.getBounds(),method); }
   void copy(Point where,const Image8& source,Point size);
   void copy(const Image8& source,Mask& m);
-  void copy(const Image8& source) { copy( source.bounds.near , source , source.size , fix_depth ); }
+  void copy(const Image8& source) { copy( source.bounds.near , source , source.size ); }
   
   // Similar, except use 16 bit image as a source
   void mimic16(const Image& source , Rectangle my_region , Rectangle source_region , ScaleType method = Subsample);
-  void mimic16(const Image& source , ScaleType method = Subsample ) { mimic(source,getBounds(),source.getBounds(),method); }
+  void mimic16(const Image& source , ScaleType method = Subsample ) { mimic16(source,getBounds(),source.getBounds(),method); }
   void copy16(Point where,const Image& source,Point size,bool fix_depth=false);
   void copy16(const Image& source,Mask& m,bool fix_depth=false);
-  void copy16(const Image& source,bool fix_depth=false) { copy( source.bounds.near , source , source.size , fix_depth ); }
+  void copy16(const Image& source,bool fix_depth=false) { copy16( source.bounds.near , source , source.size , fix_depth ); }
   
   // Output and testing
   int makeTiffHeader(unsigned char *buffer);
@@ -810,6 +812,7 @@ int test_mwt_image_strip();
 int test_mwt_image_mask();
 int test_mwt_image_contour();
 int test_mwt_image_image();
+int test_mwt_image_image8();
 int test_mwt_image();
 
 #endif
