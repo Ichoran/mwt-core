@@ -1054,7 +1054,7 @@ void Performance::setROI(Mask &m)
 }
 
 // Call this to set up a mask that detects when you're within the image but running too close to the edge of the ROI
-void Performance::setNotInROI(Image *im)
+void Performance::setNotInROI(const Image *im)
 {
   if (im==NULL) return;
   if (danger_zone==NULL || !danger_zone->bounds.contains( im->getBounds() ))
@@ -1716,82 +1716,120 @@ bool Performance::finishOutput()
 
 
 // Write some visual cues on an image that shows the current stuff being tracked
-void Performance::imprint(Image* im,short borderI,int borderW,short maskI,int maskW,short dancerI,bool show_dancer,
-                          short sitterI,bool show_sitter,short dcenterI,int dcenterR)
+void Performance::imprint(
+  Image* im, short borderI, int borderW, short maskI, int maskW, short dancerI, bool show_dancer,
+  short sitterI, bool show_sitter, short dcenterI, int dcenterR)
 {
-  if (borderW > 0 && background!=NULL)
-  {
+  // WARNING--you need to MANUALLY keep this in sync with the 8 bit version!
+  if (borderW > 0 && background!=NULL) {
     Rectangle r,R;
     R = background->getBounds();
-    r = R;
-    r.far.y = R.near.y;
-    r.expand(borderW-1);
-    im->set(r,borderI);
-    r = R;
-    r.far.x = R.near.x;
-    r.expand(borderW-1);
-    im->set(r,borderI);
-    r = R;
-    r.near.y = R.far.y;
-    r.expand(borderW-1);
-    im->set(r,borderI);
-    r = R;
-    r.near.x = R.far.x;
-    r.expand(borderW-1);
-    im->set(r,borderI);
+    r = R; r.far.y = R.near.y; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.far.x = R.near.x; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.near.y = R.far.y; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.near.x = R.far.x; r.expand(borderW-1); im->set(r,borderI);
   }
-  if (maskW > 0 && full_area!=NULL)
-  {
+  if (maskW > 0 && full_area!=NULL) {
     Mask edgemask( *full_area , ManagedList<Strip>::SubordinateList );
     full_area->extractEdge(edgemask);
     edgemask.dilate(maskW);
     im->set(edgemask,maskI);
   }
-  if (show_dancer)
-  {
-    Point p;
-    Strip s;
+  if (show_dancer) {
     Mask* m;
     dancers.start();
-    while (dancers.advance())
-    {
+    while (dancers.advance()) {
       m = &dancers.i().movie.t().mask();
       im->set(*m,dancerI);
     }
   }
-  if (show_sitter)
-  {
-    Point p;
-    Strip s;
+  if (show_sitter) {
     Mask* m;
     sitters.start();
-    while (sitters.advance())
-    {     
+    while (sitters.advance()) {     
       m = &sitters.i().movie.t().mask();
       im->set(*m,sitterI);
     }
   }
-  if (dcenterR>0)
-  {
+  if (dcenterR > 0) {
     Point p;
     Rectangle r;
     dancers.start();
-    while (dancers.advance())
-    {
+    while (dancers.advance()) {
       p = dancers.i().movie.t().data().centroid.toPoint();
       r.near = p - (dcenterR-1);
       r.far = p + (dcenterR-1);
       im->set(r,dcenterI);
       
-      if (dancers.i().find_skel && dancers.i().movie.t().skeleton != NULL)
-      {
+      if (dancers.i().find_skel && dancers.i().movie.t().skeleton != NULL) {
         Contour& c = dancers.i().movie.t().spine();
         r = im->getBounds();
         c.start();
         while (c.advance()) { if (r.contains( p + c.i() )) im->set(p+c.i() , dcenterI); }
       }
-      if (dancers.i().find_outline && dancers.i().movie.t().outline != NULL)
-      {
+      if (dancers.i().find_outline && dancers.i().movie.t().outline != NULL) {
+        Contour& c = dancers.i().movie.t().edge();
+        r = im->getBounds();
+        c.start();
+        while (c.advance()) { if (r.contains( c.i() )) im->set(c.i(),dcenterI); }
+      }
+    }
+  }
+}
+
+// Write some visual cues on an image that shows the current stuff being tracked
+void Performance::imprint8(
+  Image8* im, uint8_t borderI, int borderW, uint8_t maskI, int maskW, uint8_t dancerI, bool show_dancer,
+  uint8_t sitterI, bool show_sitter, uint8_t dcenterI, int dcenterR)
+{
+  // WARNING--you need to MANUALLY keep this in sync with the 16 bit version!
+  if (borderW > 0 && background!=NULL) {
+    Rectangle r,R;
+    R = background->getBounds();
+    r = R; r.far.y = R.near.y; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.far.x = R.near.x; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.near.y = R.far.y; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.near.x = R.far.x; r.expand(borderW-1); im->set(r,borderI);
+  }
+  if (maskW > 0 && full_area!=NULL) {
+    Mask edgemask( *full_area , ManagedList<Strip>::SubordinateList );
+    full_area->extractEdge(edgemask);
+    edgemask.dilate(maskW);
+    im->set(edgemask, maskI);
+  }
+  if (show_dancer) {
+    Mask* m;
+    dancers.start();
+    while (dancers.advance()) {
+      m = &dancers.i().movie.t().mask();
+      im->set(*m, dancerI);
+    }
+  }
+  if (show_sitter) {
+    Mask* m;
+    sitters.start();
+    while (sitters.advance()) {     
+      m = &sitters.i().movie.t().mask();
+      im->set(*m, sitterI);
+    }
+  }
+  if (dcenterR > 0) {
+    Point p;
+    Rectangle r;
+    dancers.start();
+    while (dancers.advance()) {
+      p = dancers.i().movie.t().data().centroid.toPoint();
+      r.near = p - (dcenterR-1);
+      r.far = p + (dcenterR-1);
+      im->set(r,dcenterI);
+      
+      if (dancers.i().find_skel && dancers.i().movie.t().skeleton != NULL) {
+        Contour& c = dancers.i().movie.t().spine();
+        r = im->getBounds();
+        c.start();
+        while (c.advance()) { if (r.contains( p + c.i() )) im->set(p+c.i() , dcenterI); }
+      }
+      if (dancers.i().find_outline && dancers.i().movie.t().outline != NULL) {
         Contour& c = dancers.i().movie.t().edge();
         r = im->getBounds();
         c.start();
@@ -2047,13 +2085,34 @@ int test_mwt_blob_performance()
   }
   if (bad) return 9;
   
-  p->imprint(&im , 0 , 3 , W-1 , 2 , W-1 , true , 0 , true , 0 , 2);
+  Image km(im.getBounds(), false);
+  km.depth = 8;
+  km.copy(im, true);
+  Image8 jm(im.getBounds(), false);
+  jm.copy16(km);
+  for (int x = 0; x < im.size.x; x++) for (int y = 0; y < im.size.y; y++) if (jm.raw(x,y) != km.raw(x,y)) {
+    printf("Copied: at %d %d we find %d != %d (originally %d)\n", x, y, jm.raw(x,y), km.raw(x,y), im.raw(x,y));
+    return 10;
+  }
+
+  p->imprint( &im, 0, 3, W-1, 2, W-1, true, 0, true, 0, 2);
+
+  p->imprint8(&jm, 0, 3, 255, 2, 255, true, 0, true, 0, 2);
+  p->imprint( &km, 0, 3, 255, 2, 255, true, 0, true, 0, 2);
+  for (int x = 0; x < im.size.x; x++) for (int y = 0; y < im.size.y; y++) if (jm.raw(x,y) != km.raw(x,y)) {
+    printf("Imprinted: at %d %d we find %d != %d\n", x, y, jm.raw(x,y), km.raw(x,y));
+    return 11;
+  }
+
   im <<= 16-im.depth;
   i = im.writeTiff("performance_imprint.tiff");
-  if (i!=0) return 10;
+  if (i!=0) return 12;
+
+  i = jm.writeTiff("performance_imprint8.tiff");
+  if (i != 0) return 13;
   
   good = p->finishOutput();
-  if (!good) return 11;
+  if (!good) return 14;
   
   if (p->errors.size!=0)
   {
@@ -2062,7 +2121,7 @@ int test_mwt_blob_performance()
     {
       printf("Error: #%d says %s\n",p->errors.i().ID,p->errors.i().what);
     }
-    return 12;
+    return 15;
   }
   
   return 0;

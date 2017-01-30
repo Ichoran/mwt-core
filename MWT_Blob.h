@@ -13,6 +13,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #include "MWT_Geometry.h"
 #include "MWT_Lists.h"
@@ -471,7 +472,7 @@ public:
   void setROI(const Rectangle& r);
   void setROI(const Ellipse& e);
   void setROI(Mask& m);
-  void setNotInROI(Image *im);
+  void setNotInROI(const Image *im);
   
   // Image scanning
   int scanImage(Image* im);  // Lower level, called by latter functions
@@ -494,7 +495,9 @@ public:
   bool logErrors(char* err_fname);
   bool finishOutput();
   void imprint(Image* im,short borderI,int borderW,short maskI,int maskW,short dancerI,bool show_dancer,
-               short sitterI,bool show_sitter,short dcenterI,int dcenterR);
+    short sitterI,bool show_sitter,short dcenterI,int dcenterR);
+  void imprint8(Image8* im, uint8_t borderI, int borderW, uint8_t maskI, int maskW, uint8_t dancerI, bool show_dancer,
+    uint8_t sitterI, bool show_sitter, uint8_t dcenterI, int dcenterR);
 };
 
 
