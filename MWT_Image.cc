@@ -2687,7 +2687,7 @@ void Image::diffAdaptCopy8(Point where, const Image8& source, Point size, Image&
         else {
           for (y=0;y<size.y-1;y+=2) {  // Two at a time with ints
             uint16_t qy = *((uint16_t*)(q+y));
-            int qq = (((int)(qy & 0xFF00)) << 8) | (qy & 0xFF);
+            int qq = (((int)(qy & 0xFF00)) << 8) | (int)(qy & 0xFF);
             *((int*)(g+y)) = *((int*)(g+y)) + (qq<<srcrate) - (((*(int*)(g+y))>>rate)&dualratemask);
             *((int*)(p+y)) = (dualgray + qq) - (((*(int*)(g+y))>>shift)&dualshiftmask);
           }
@@ -2709,7 +2709,7 @@ void Image::diffAdaptCopy8(Point where, const Image8& source, Point size, Image&
         else {
           for (y=0;y<size.y-1;y+=2) {  // Batch process with ints
             uint16_t qy = *((uint16_t*)(q+y));
-            int qq = (((int)(qy & 0xFF00)) << 8) | (qy & 0xFF);
+            int qq = (((int)(qy & 0xFF00)) << 8) | (int)(qy & 0xFF);
             *((int*)(g+y)) = *((int*)(g+y)) + ((qq>>srcrate)&dualsrcratemask) - (((*(int*)(g+y))>>rate)&dualratemask);
             *((int*)(p+y)) = (dualgray + qq) - (((*(int*)(g+y))>>shift)&dualshiftmask);
           }
@@ -2802,7 +2802,7 @@ void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
         }
         else {
           for (y=y0;y<y1;y+=2) { // "Vector" mode
-            uint8_t sy = source.viewS(x,y);
+            uint16_t sy = source.viewS(x,y);
             int iyy = (((int)(sy & 0xFF00)) << 8) | (sy & 0xFF);
             bg.rareI(x,y) = (bg.rareI(x,y) + ((iyy>>srcrate)&dualsrcratemask)) - ((bg.rareI(x,y)>>rate)&dualratemask);
             rareI(x,y) = (dualgray + iyy) - ((bg.rareI(x,y)>>shift)&dualshiftmask);
@@ -4204,163 +4204,27 @@ int test_mwt_image_image8() {
   for (x = 0; x < jm1.size.x; x++) for (y = 0; y < jm1.size.y; y++) if (jm1.raw(x,y) != im1.raw(x,y) || km1.raw(x,y) != im1.raw(x,y)) return 4;
   for (x = 0; x < jm2.size.x; x++) for (y = 0; y < jm2.size.y; y++) if (jm2.raw(x,y) != im2.raw(x,y) || km2.raw(x,y) != im2.raw(x,y)) return 5;
   for (x = 0; x < jm3.size.x; x++) for (y = 0; y < jm3.size.y; y++) if (jm3.raw(x,y) != im3.raw(x,y)) return 6;
-  jm1.diffCopy8(Point(4,4),im3,Point(2,2),jm2);  // im1 might actually be 7 bits deep now, but we can ignore that here
-  km1.diffCopy(Point(4,4),jm3,Point(2,2),jm2);   // im1 might actually be 7 bits deep now, but we can ignore that here
+  jm1.diffCopy8(Point(4,4),im3,Point(2,2),jm2); 
+  km1.diffCopy(Point(4,4),jm3,Point(2,2),jm2);
   for (x = 0; x < jm1.size.x; x++) for (y = 0; y < jm1.size.y; y++) if (jm1.raw(x,y) != km1.raw(x,y)) return 7;
   jm1.diffAdaptCopy8(Point(2,2),im3,Point(2,2),jm2,3);
-  jm1.diffAdaptCopy(Point(2,2),jm3,Point(2,2),km2,3);
+  km1.diffAdaptCopy(Point(2,2),jm3,Point(2,2),km2,3);
   for (x = 0; x < jm2.size.x; x++) for (y = 0; y < jm2.size.y; y++) if (jm2.raw(x,y) != km2.raw(x,y)) return 8;
   for (x = 0; x < jm1.size.x; x++) for (y = 0; y < jm1.size.y; y++) if (jm1.raw(x,y) != km1.raw(x,y)) return 9;
   
-  /*
-  m.addStrip( Strip(2,4,8) );
-  m.addStrip( Strip(3,8,8) );
-  m.addStrip( Strip(4,8,8) );
-  m.addStrip( Strip(5,8,8) );
-  m.addStrip( Strip(6,5,8) );
+  m.addStrip( Strip(2,2,5) );
+  m.addStrip( Strip(3,4,6) );
+  m.addStrip( Strip(4,2,4) );
   m.findBounds();
-  Rectangle rrr = im1.getBounds();
-  for (int yy = rrr.near.y ; yy <= rrr.far.y ; yy++)
-  {
-    for (int xx = rrr.near.x ; xx <= rrr.far.x ; xx++) printf("%02x ",im1.get(xx,yy));
-    printf("\n");
-  }
-  im1.diffCopy(im1,m,im1);  // bg subtraction of self == set pixels to 64 in mask
-  im1.set(3,3 , 38);
-  x = im1.floodRect( DualRange(40,180,40,180) , &ssstor , &slstor , mlfd , im1.getBounds() );
-  printf("%d %d\n",x,mlfd.h().stencil.pixel_count);
-  if (x != 1 || mlfd.h().stencil.pixel_count!=19) return 5;
+  for (x = 0; x < jm2.size.x; x++) for (y = 0; y < jm2.size.y; y++) jm2.raw(x,y) = km2.raw(x,y) = 0x50;
   
-  //mlfd.flush();
-  im1 = 0;
-  im2 = 5;
-  Mask m2(Rectangle(Point(2,2),Point(7,7)),&slstor);
-  im1.copy(im2,m2);
-  for (x=0;x<10;x++) for (y=0;y<11;y++) { if ((y<2 || y>8 || x<2 || x>8) && (im1.get(x,y)==5)) return 6; }
-  
-  im3 = 55;
-  Mask m3(Rectangle(Point(3,3),Point(6,6)),&slstor);
-  im3.adapt(im2,m3,3);
-  if (im3.get(2,2)!=55 || im3.get(3,3)!=49 || im3.get(6,6)!=49 || im3.get(7,7)!=55) return 7;
-  
-  Mask m4(Rectangle(Point(4,4),Point(5,5)),&slstor);
-  Mask m5(Rectangle(Point(2,2),Point(3,3)),&slstor);
-  Image im4( im1.size*2, false );
-  Image im5( im2 , im2.getBounds(), false );
-  Image im6( im3 , im3.getBounds(), false );
-  
-  im4.bin = 2;
-  im4.depth = im1.depth;
-  im4.copy(im1);
-  
-  im1.diffCopy(im3,m4,im2);
-  im4.diffCopy(im6,m4,im5);
-  for (x=0;x<im1.size.x;x++) for (y=0;y<im1.size.y;y++) if (im1.get(x,y) != im4.get(x,y)) return 8;
-  for (x=im2.bounds.near.x;x<=im2.bounds.far.x;x++) for (y=im2.bounds.near.y;y<=im2.bounds.far.y;y++) if (im2.get(x,y) != im5.get(x,y)) return 9;
-  for (x=im3.bounds.near.x;x<=im3.bounds.far.x;x++) for (y=im3.bounds.near.y;y<=im3.bounds.far.y;y++) if (im3.get(x,y) != im6.get(x,y)) return 10;
-  
-  im1.diffAdaptCopy(im3,m5,im2,3);
-  im4.diffAdaptCopy(im6,m5,im5,3);
-  //for (x=0;x<im1.size.x;x++) for (y=0;y<im1.size.y;y++) printf("%d %d -> %d %d\n",x,y,(int)im2.get(x,y),(int)im5.get(x,y));
-  for (x=0;x<im1.size.x;x++) for (y=0;y<im1.size.y;y++) if (im1.get(x,y) != im4.get(x,y)) return 11;
-  for (x=im2.bounds.near.x;x<=im2.bounds.far.x;x++) for (y=im2.bounds.near.y;y<=im2.bounds.far.y;y++) if (im2.get(x,y) != im5.get(x,y)) return 12;
-  
-#ifndef DIVIDE_BG
-  if (im1.get(1,1)!=0 || im1.get(2,2)!=44+64 || im1.get(3,3)!=38+64 || im1.get(4,4)!=44+64 || im1.get(6,6)!=5) return 13;
-#endif
-  
-  im1.diffCopy(im1,m,im1);
-  im1.set(3,3 , 38);
-  x = im1.floodMask( DualRange(40,180,40,180) , &ssstor , &slstor , mlfd , m3 );
-  if (x != 1 || mlfd.t().stencil.pixel_count!=19 || mlfd.size!=2) return 14;
-  mlfd.t().principalAxes(im1,Range(40,180));
-  
-#ifdef UNIT_TEST_OWNER
-  im1.depth = 16;
-  im1.writeTiff("test_image.tiff");
-#endif
-  
-  im1.depth = 5;
-  im1 = 20;
-  im1.set( Rectangle(Point(0,0) , Point(3,4)) , 30 );
-  im2.mimic(im1);
-  im2 -= Point(2,2);
-  for (x=0;x<im2.size.x;x++)
-  {
-    for (y=0;y<im2.size.y;y++)
-    {
-      if (y<3 && x<3)
-      {
-        if (im2.get(x,y) != 30<<1) return 15;
-      }
-      else
-      {
-        if (im2.get(x,y) != 20<<1) return 16;
-      }
-    }
-  }
-  
-  im1 = 20;
-  im1.set( Rectangle(Point(0,0) , Point(4,5)) , 30 );
-  im2.mimic(im1 , Image::LinearFit);
-  for (x=0;x<im2.size.x;x++)
-  {
-    for (y=0;y<im2.size.y;y++)
-    {
-      if (y<3 && x<3)
-      {
-        if (im2.get(x,y) != 30<<1) return 17;
-      }
-      else if (y==3 && x<3)
-      {
-        if (im2.get(x,y) != 45) return 18;
-      }
-      else
-      {
-        if (im2.get(x,y) != 20<<1) return 19;
-      }
-    }
-  }
-  
-  im1 = 20000;
-  im1.depth = 16;
-  im1.set( Rectangle(Point(0,0) , Point(4,5)) , 30000 );
-  im1.bin = 2;
-  if (im1.getBounds().area() != 25) return 20;
-  if (im1.get(0,0) != 30000) return 21;
-  if (im1.get(4,4) != 20000) return 22;
-#ifdef UNIT_TEST_OWNER
-  im1.writeTiff("test_bin2.tiff");
-#endif
-  im1.bin = 3;
-  if (im1.getBounds().area() != 9) return 23;
-  if (im1.get(0,0) != 30000) return 24;
-  if (im1.get(2,2) != 20000) return 25;
-#ifdef UNIT_TEST_OWNER
-  im1.writeTiff("test_bin3.tiff");
-#endif
-  
-#ifdef BENCHMARK
-  Image huge_image(Point(1536,2048));
-  Image big_image(Point(600,800));
-  big_image.depth = huge_image.depth - 2;
-  
-  huge_image = 64;
-  
-  clock_t t0 = clock();
-  
-  for (x=0;x<100;x++) big_image.mimic(huge_image);
-  
-  clock_t t1 = clock();
-  
-  for (x=0;x<100;x++) big_image.mimic(huge_image,Image::LinearFit);
-  
-  clock_t t2 = clock();
-  
-  printf("%f per second\n", 100.0 / (( (double)t1-(double)t0 ) / (double)CLOCKS_PER_SEC) );
-  printf("%f per second\n", 100.0 / (( (double)t2-(double)t1 ) / (double)CLOCKS_PER_SEC) );
-#endif
-  */
+  jm1.diffCopy8(im3, m, jm2);
+  km1.diffCopy(jm3, m, km2);
+  jm1.diffAdaptCopy8(im3, m, jm2, 3);
+  km1.diffAdaptCopy(jm3, m, km2, 3);
+  for (x = 0; x < jm2.size.x; x++) for (y = 0; y < jm2.size.y; y++) if (jm2.raw(x,y) != km2.raw(x,y)) return 10;
+  for (x = 0; x < jm1.size.x; x++) for (y = 0; y < jm1.size.y; y++) if (jm1.raw(x,y) != km1.raw(x,y)) return 11;
+
   return 0;
 }
 
