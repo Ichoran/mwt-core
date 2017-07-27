@@ -479,6 +479,9 @@ public:
   void adoptScan(Image* im); // Also lower level
   int initialScan(Image *fg,double time);
   int initialRefs(Image *fg,ManagedList<Point>& locations,double time);
+  // 8 bit versions
+  int initialScan8(Image8 *fg,double time);
+  int initialRefs8(Image8 *fg,ManagedList<Point>& locations,double time);
   
   int anticipateNext(double time);
   bool findNextItemBounds(Rectangle& im_bound);

@@ -1,0 +1,8 @@
+[package]
+name = "fake-worm-generator"
+version = "0.1.0"
+authors = ["Rex Kerr <ichoran@gmail.com>"]
+
+[dependencies]
+clap = "2.25.1"
+cgmath = "0.14.1"

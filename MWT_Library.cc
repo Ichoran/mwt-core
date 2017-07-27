@@ -448,6 +448,7 @@ int TrackerLibrary::cutEllipse(int handle,int centerx,int centery,int radiusx,in
 // Draw the region onto an image
 int TrackerLibrary::showROI(int handle,Image& im)
 {
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
   
@@ -459,11 +460,32 @@ int TrackerLibrary::showROI(int handle,Image& im)
     
   return handle;  
 }
+int TrackerLibrary::showROI8(int handle,Image8& im)
+{
+  // WARNING - You must keep this in sync with the 16 bit version BY HAND!!
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+  uint8_t white = 255;
+  uint8_t color = te->performance.blob_is_dark ? 1 : white;  // Reference object will be oppositely colored from object
+  im.divide_bg = te->performance.use_division;
+  te->performance.imprint8(&im , 0 , 3 , color , 2 , color , false , color , false , color , 0);
+    
+  return handle;  
+}
 
 
 // Copy and resize an image--doesn't actually need a handle
 int TrackerLibrary::resizeRescale(int handle,Image& source,Image& dest,Rectangle dest_selection)
 {
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
+  dest.mimic(source,dest_selection,source.getBounds());
+  return handle;
+}
+int TrackerLibrary::resizeRescale8(int handle,Image8& source,Image8& dest,Rectangle dest_selection)
+{
+  // WARNING - You must keep this in sync with the 16 bit version BY HAND!!
   dest.mimic(source,dest_selection,source.getBounds());
   return handle;
 }
@@ -471,6 +493,7 @@ int TrackerLibrary::resizeRescale(int handle,Image& source,Image& dest,Rectangle
 // Copy and resize the memory image--does need a handle
 int TrackerLibrary::resizeRescaleMemory(int handle,Image& dest,Rectangle dest_selection)
 {
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
   
@@ -479,16 +502,39 @@ int TrackerLibrary::resizeRescaleMemory(int handle,Image& dest,Rectangle dest_se
   dest.mimic( *p.background , dest_selection , p.background->getBounds() );
   return handle;
 }
+int TrackerLibrary::resizeRescaleMemory8(int handle,Image8& dest,Rectangle dest_selection)
+{
+  // WARNING - You must keep this in sync with the 16 bit version BY HAND!!
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  Performance& p = all_trackers[handle]->performance;
+  if (p.background==NULL) return 0;
+  dest.mimic16( *p.background , dest_selection , p.background->getBounds() );
+  return handle;
+}
 
 // Copy and resize the fixed image--needs a handle, and only works after a scanObjects
 int TrackerLibrary::resizeRescaleFixed(int handle,Image& dest,Rectangle dest_selection)
 {
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
   
   Performance& p = all_trackers[handle]->performance;
   if (p.foreground==NULL) return 0;
   dest.mimic( *p.foreground , dest_selection , p.foreground->getBounds() );
+  return handle;
+}
+int TrackerLibrary::resizeRescaleFixed8(int handle,Image8& dest,Rectangle dest_selection)
+{
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  Performance& p = all_trackers[handle]->performance;
+  if (p.foreground==NULL) return 0;
+  dest.mimic16( *p.foreground , dest_selection , p.foreground->getBounds() );
   return handle;
 }
 
@@ -573,6 +619,7 @@ int TrackerLibrary::removeLastReferenceObject(int handle)
 // Try to find reference objects and return number found (-2 if initialization isn't done)
 int TrackerLibrary::scanRefs(int handle,Image& im)
 {
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
   
@@ -586,10 +633,27 @@ int TrackerLibrary::scanRefs(int handle,Image& im)
   
   return te->reference_objects.size - te->working.size;
 }
+int TrackerLibrary::scanRefs8(int handle, Image8& im)
+{
+  // WARNING - You must keep this in sync with the 16 bit version BY HAND!!
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+  if (!te->image_info_known || !te->reference_intensities_known) return -2;
+  im.divide_bg = te->performance.use_division;
+  Performance& p = te->performance;
+  te->working.imitate( te->reference_objects );
+  p.initialRefs8(&im , te->working , 0.0);
+  te->references_found = true;
+  
+  return te->reference_objects.size - te->working.size;
+}
 
 // Show what reference objects were found
 int TrackerLibrary::showRefs(int handle,Image& im,bool show_as_white)
 {
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
   
@@ -599,6 +663,21 @@ int TrackerLibrary::showRefs(int handle,Image& im,bool show_as_white)
   short color = 1;
   if (show_as_white) color = (1<<te->image_bits)-1;
   te->performance.imprint(&im , 0 , 3 , (1<<te->image_bits)-1 , 2 , 0 , false , color , true , 0 , 0);
+  
+  return handle;  
+}
+int TrackerLibrary::showRefs8(int handle,Image8& im,bool show_as_white)
+{
+  // WARNING - You must keep this in sync with the 16 bit version BY HAND!!
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+  if (!te->references_found) return 0;
+  im.divide_bg = te->performance.use_division;
+  uint8_t color = 1;
+  if (show_as_white) color = 255;
+  te->performance.imprint8(&im , 0 , 3 , 255 , 2 , 0 , false , color , true , 0 , 0);
   
   return handle;  
 }
@@ -697,6 +776,7 @@ int TrackerLibrary::setAdaptationRate(int handle,int alpha)
 // Does NOT return the handle; returns the number of objects found
 int TrackerLibrary::scanObjects(int handle,Image& im)
 {
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
   TrackerEntry* te = all_trackers[handle];
@@ -711,10 +791,28 @@ int TrackerLibrary::scanObjects(int handle,Image& im)
   te->objects_found = true;
   return n;
 }
+int TrackerLibrary::scanObjects8(int handle,Image8& im)
+{
+  // WARNING - You must keep this in sync with the 16 bit version BY HAND!!
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  TrackerEntry* te = all_trackers[handle];
+  if (!te->image_info_known || !te->border_size_known || !te->object_intensities_known || 
+      !te->object_sizes_known || !te->adaptation_rate_known)
+  {
+    return -2;
+  }
+
+  im.divide_bg = te->performance.use_division;
+  int n = te->performance.initialScan8(&im,0.0);
+  te->objects_found = true;
+  return n;
+}
 
 // Finds moving objects and writes stuff back to the image to show what happened
 int TrackerLibrary::showObjects(int handle,Image& im)
 {
+  // WARNING - You must keep this in sync with the 8 bit version BY HAND!!
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
   
@@ -727,6 +825,24 @@ int TrackerLibrary::showObjects(int handle,Image& im)
   if (te->performance.blob_is_dark) color = (1<<te->image_bits)-1;
   else other = (1<<te->image_bits)-1;
   te->performance.imprint(&im , 0 , 3 , (1<<te->image_bits)-1 , 2 , color , true , 0 , false , other , 2);  
+  
+  return handle;
+}
+int TrackerLibrary::showObjects8(int handle,Image8& im)
+{
+  // WARNING - You must keep this in sync with the 16 bit version BY HAND!!
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+  if (!te->objects_found) return 0;
+
+  im.divide_bg = te->performance.use_division;
+  short color = 0;
+  short other = 0;
+  if (te->performance.blob_is_dark) color = 255;
+  else other = 255;
+  te->performance.imprint8(&im , 0 , 3 , 255 , 2 , color , true , 0 , false , other , 2);  
   
   return handle;
 }

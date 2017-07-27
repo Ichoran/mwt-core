@@ -1175,6 +1175,13 @@ int Performance::initialScan(Image *fg,double time)
     return n;
   }
 }
+int Performance::initialScan8(Image8 *fg, double time)
+{
+  Image im(fg->getBounds(), false);
+  im.depth = (foreground != NULL) ? foreground->depth : ((background != NULL) ? background->depth : Image::DEFAULT_BIT_DEPTH);
+  im.copy8(*fg, true);
+  return initialScan(&im, time);
+}
 
 
 // Find reference objects initially
@@ -1217,6 +1224,13 @@ int Performance::initialRefs(Image* fg,ManagedList<Point>& locations,double time
   
   return sitters.size;
 }
+int Performance::initialRefs8(Image8 *fg, ManagedList<Point>& locations, double time) {
+  Image im(fg->getBounds(), false);
+  im.depth = (foreground != NULL) ? foreground->depth : ((background != NULL) ? background->depth : Image::DEFAULT_BIT_DEPTH);
+  im.copy8(*fg, true);
+  return initialRefs(&im, locations, time);
+}
+
 
 
 // Get ready to load in data from the next image (return how many items there will be)
