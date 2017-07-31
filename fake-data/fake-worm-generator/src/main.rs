@@ -30,6 +30,7 @@ fn pvf32(s: &str, msg: &str) -> Ret<Vector2<f32>> {
     Ok(Vector2::new(x as f32, y as f32))
 }
 
+
 #[derive(Debug)]
 struct Worm {
     ampl: f64,
@@ -71,6 +72,22 @@ impl Worm {
         let step = pvf32(tok.next().ok_or("Worm has no movement axis")?, "worm step")?;
         Ok(Worm::new(ampl, wave, cycl, aspc, orig, step, Box::new(widely)))
     }
+    fn at_time<'a>(&'a self, t: f64) -> WormIter<'a> {
+        WormIter{ time: t, axial: -1f64, radial: 0f64, worm: self }
+    }
+}
+
+#[derive(Debug)]
+struct WormIter<'a> {
+    time: f64,
+    axial: f64,
+    radial: f64,
+    worm: &'a Worm
+}
+
+impl<'a> Iterator for WormIter<'a> {
+    type Item = Vector2<f32>;
+    fn next(&mut self) -> Option<Self::Item> { None }
 }
 
 #[derive(Debug)]
@@ -125,15 +142,29 @@ impl Index<Vector2<u32>> for Image {
     }
 }
 
+impl IndexMut<Vector2<u32>> for Image {
+    fn index_mut(&mut self, index: Vector2<u32>) -> &mut u8 {
+        let x = index.x % self.width;
+        let y = index.y % self.height;
+        let mut data: &mut [u8] = self.data.as_mut();
+        &mut data[(x + y*self.width)as usize]
+    }
+}
+
 impl Image {
     fn new(w: u32, h: u32, bg: u8) -> Image {
         let size = (w*h) as usize;
         Image { width: w, height: h, data: vec![bg; size] }
     }
+
+    fn imprint(&mut self, fg: u8, worm: Worm, t: f64) -> &mut Image {
+        self[Vector2{ x: 1, y: 1}] = fg;
+        self[Vector2{ x: 2, y: 1}] = fg;
+        self
+    }
 }
 
 fn main() {
-    println!("Hello, world!");
     let args = App::new("Fake Worm Generator")
         .version("0.1")
         .author("Rex A. Kerr (ichoran@gmail.com)")
@@ -145,13 +176,13 @@ fn main() {
         .arg(Arg::with_name("fg")               .long("fg")    .takes_value(true))
         .arg(Arg::with_name("noise")            .long("noise") .takes_value(true))
         .arg(Arg::with_name("out")   .short("o").long("output").takes_value(true))
-        .arg(Arg::with_name("WORMS").index(1).max_values(1000))
+        .arg(Arg::with_name("WORMS").index(1).max_values(1000).help(
+            "Specify one or more animal positions in format ampl:wave:len:aspect:px^py:vx^vy"
+        ))
         .get_matches();
     let params = match Parameters::parse(&args) {
         Err(e) => { println!("Error in arguments:\n{}", e); std::process::exit(1) }
         Ok(p)  => p
     };
-    println!("{:?}", Worm::parse("2.2:7.2:1.5:0.1:16^16:2.1^2.1"));
     println!("{:?}", params);
-    println!("Goodbye, world!");
 }
