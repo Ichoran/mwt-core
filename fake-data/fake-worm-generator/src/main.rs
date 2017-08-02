@@ -102,7 +102,8 @@ impl<'a> WormIter<'a> {
         let y = (self.worm.ampl as f32) * theta.sin();
         let wiggle = self.worm.wave/(2.0 * std::f64::consts::PI * self.worm.ampl);
         self.spine = self.worm.origin + u*x + v*y;
-        self.orth = Vector2::new(-theta.cos(), wiggle as f32).normalize();
+        let unrotated = Vector2::new(-theta.cos(), wiggle as f32).normalize();
+        self.orth = u*unrotated.x + v*unrotated.y;
     }
 }
 
@@ -159,7 +160,7 @@ impl Parameters {
         if let Some(bg)= args.value_of("bg")     { ans.background = pu8(bg, "bg")? }
         if let Some(fg)= args.value_of("fg")     { ans.foreground = pu8(fg, "fg")? }
         if let Some(n) = args.value_of("noise")  { ans.noise  = pu8(n, "noise")? }
-        if let Some(s) = args.value_of("prefix") { ans.prefix = s.to_string() }
+        if let Some(s) = args.value_of("out")    { ans.prefix = s.to_string() }
         if let Some(ws)= args.values_of("WORMS") {
             for (i,w) in ws.enumerate() {
                 ans.worms.push(Worm::parse(w).map_err(|e| format!("Error in worm {}\n{}", i+1, e))?);
