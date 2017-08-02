@@ -6,3 +6,4 @@ authors = ["Rex Kerr <ichoran@gmail.com>"]
 [dependencies]
 clap = "2.25.1"
 cgmath = "0.14.1"
+rand = "0.3.0"
