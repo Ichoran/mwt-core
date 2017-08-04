@@ -964,6 +964,13 @@ int TrackerLibrary::loadImage(int handle,Image& im,float time)
       !te->object_sizes_known || !te->adaptation_rate_known || !te->object_persistence_known ||
       !te->reference_intensities_known || !te->objects_found)
   {
+    /*
+    printf("<%d %d %d %d %d %d %d %d>\n",
+      te->image_info_known, te->border_size_known, te->object_intensities_known, 
+      te->object_sizes_known, te->adaptation_rate_known, te->object_persistence_known
+      te->reference_intensities_known, te->objects_found
+    );
+    */
     return 0;
   }
   

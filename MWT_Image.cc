@@ -1110,7 +1110,13 @@ void Contour::approximateContour(float max_err)
   int x_coords[ size() ];
   int y_coords[ size() ];
   Listable<Scorer> *score_head,*score_tail;
+#ifdef CLANG_WORKAROUND
+  unsigned char clang_workaround_buffer[ size()*sizeof(Listable<Scorer>) ];
+  Listable<Scorer> *scores = (Listable<Scorer>*) clang_workaround_buffer;
+  for (int cwbi = 0; cwbi < size(); cwbi++) new (scores + cwbi) Listable<Scorer>();
+#else
   Listable<Scorer> scores[ size() ];
+#endif
   
   N = 0;
   start();
@@ -2247,7 +2253,7 @@ void Image::diffCopy(Point where, const Image& source, Point size, const Image& 
   else {
     Point stop = where + size;
     if (divide_bg) {
-      register unsigned int I_fg;
+      unsigned int I_fg;
       if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
         I_fg = 1 + (unsigned int)source.get(x,y);
         rare(x,y) = (I_fg<<(source.depth+1)) / (1 + I_fg + (unsigned int)(bg.get(x,y)>>shift));

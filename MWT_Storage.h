@@ -668,7 +668,7 @@ public:
   Listable< Dualled<T> >* dual;
   Dualable() : dual(NULL) { }
   ~Dualable() { }
-  bool operator<(const Dualable<T>& d) { return data<d.data; }
+  bool operator<(const Dualable<T>& d) { return data() < d.data(); }
   inline T& data() { return value; }
 };
 template <class T> class Dualled  // This one doesn't hold the data and points to the one that does

@@ -198,7 +198,8 @@ PackedContour::PackedContour(Contour& c) : x_start(0),y_start(0),size(0),bits(NU
   }
   else return;
   
-  bits = new unsigned char[ (size+3)/4 + 1 ];
+  int n = (size+3)/4 + 1;
+  bits = new unsigned char[n];
   unsigned int accumulator = 0;
   int cycle_index = 0;
   int bits_index = 0;
@@ -217,7 +218,7 @@ PackedContour::PackedContour(Contour& c) : x_start(0),y_start(0),size(0),bits(NU
       cycle_index++;
       if (cycle_index>=4)
       {
-        if (bits_index>=(size+3)/4)
+        if (bits_index >= n-1)
         {
           printf("Yikes!\n");
         }
@@ -234,11 +235,16 @@ PackedContour::PackedContour(Contour& c) : x_start(0),y_start(0),size(0),bits(NU
     cycle_index++;
     if (cycle_index>=4)
     {
+      if (bits_index >= n-1)
+      {
+        printf("Yikes!\n");
+      }
       bits[bits_index++] = (unsigned char)accumulator;
       accumulator = 0;
       cycle_index = 0;
     }
   }
+  while (bits_index < n) bits[bits_index++] = 0;
 }
 
 // Converts a packed contour into a regular one
@@ -1415,6 +1421,7 @@ int Performance::findNext()
   dancers.start();
   while (dancers.advance())
   {
+    //printf("I found a dancer!  %d spans %d - %d\n", dancers.i().ID, dancers.i().frames.lo(), dancers.i().frames.hi());
     found = dancers.i().findAnother(false,danger_zone);
     if (!found)
     {
@@ -1424,7 +1431,7 @@ int Performance::findNext()
         {
           fates.Append( BlobOriginFate(current_frame,dancers.i().ID,0) );
         }
-        dancers.i().invalidate();       
+        dancers.i().invalidate();  
         dancers.Backspace();
 
       }

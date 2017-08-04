@@ -126,11 +126,13 @@ class PackedContour
 public:
   short x_start;
   short y_start;
-  int size;  // Length of contour including start point
+  volatile int size;  // Length of contour including start point
   unsigned char *bits;
   PackedContour() : x_start(0),y_start(0),size(0),bits(NULL) { }
   PackedContour(Contour& c);
-  ~PackedContour() { if (bits!=NULL) { delete[] bits; bits=NULL; } }
+  // Warning: something VERY sketchy is going on here; destructor gets called twice!
+  // `volatile int size` provides a workaround, but why is it called twice???
+  ~PackedContour() { if (bits != NULL && size>0) { delete[] bits; bits=NULL; size = 0; } }
   Contour* unpack(Contour* c);
   void printData(FILE* f,bool add_newline);
 };
