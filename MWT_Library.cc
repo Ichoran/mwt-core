@@ -787,7 +787,7 @@ int TrackerLibrary::scanObjects(int handle,Image& im)
   }
 
   im.divide_bg = te->performance.use_division;
-  int n = te->performance.initialScan(&im,0.0);
+  int n = te->performance.initialScan(&im, 0.0);
   te->objects_found = true;
   return n;
 }
@@ -804,7 +804,7 @@ int TrackerLibrary::scanObjects8(int handle,Image8& im)
   }
 
   im.divide_bg = te->performance.use_division;
-  int n = te->performance.initialScan8(&im,0.0);
+  int n = te->performance.initialScan8(&im, 0.0);
   te->objects_found = true;
   return n;
 }
@@ -977,6 +977,39 @@ int TrackerLibrary::loadImage(int handle,Image& im,float time)
   im.divide_bg = te->performance.use_division;	
   Performance& p = te->performance;
   p.readyNext(&im,time);
+  te->image_loaded = true;
+  te->statistics_ready = false;
+  SummaryData* sd = new( te->summary.Append() ) SummaryData( p.current_frame , time , &te->eventstore );
+  sd->update_frequency = te->update_frequency;
+  
+  return handle;
+}
+
+
+// Load an 8 bit image for processing
+int TrackerLibrary::loadImage8(int handle, Image8& im, float time)
+{
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+  if (!te->image_info_known || !te->border_size_known || !te->object_intensities_known || 
+      !te->object_sizes_known || !te->adaptation_rate_known || !te->object_persistence_known ||
+      !te->reference_intensities_known || !te->objects_found)
+  {
+    /*
+    printf("<%d %d %d %d %d %d %d %d>\n",
+      te->image_info_known, te->border_size_known, te->object_intensities_known, 
+      te->object_sizes_known, te->adaptation_rate_known, te->object_persistence_known
+      te->reference_intensities_known, te->objects_found
+    );
+    */
+    return 0;
+  }
+  
+  im.divide_bg = te->performance.use_division;  
+  Performance& p = te->performance;
+  p.readyNext8(&im,time);
   te->image_loaded = true;
   te->statistics_ready = false;
   SummaryData* sd = new( te->summary.Append() ) SummaryData( p.current_frame , time , &te->eventstore );

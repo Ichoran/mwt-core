@@ -181,6 +181,7 @@ public:
   void tossStats();
   Rectangle findNextROI(Image* bg,int border) const;
   void clip(const Blob& last,Image* fg,Image* bg,int border);
+  void clip8(const Blob& last, Image8* fg, Image* bg, int border);
   int find(Mask* old_mask,Mask* exclusion_mask);
   void adoptCandidate();
   void flush();
@@ -295,6 +296,7 @@ public:
   void setFirst(Image* im,FloodData *fd,int frame,double time);
   Blob* makeFirst(int frame,double time);
   void readyAnother(Image *fg,Image *bg,int frame,double time);
+  void readyAnother8(Image8 *fg, Image *bg, int frame, double time);
   bool findAnother(bool best_guess,Mask* exclusion_mask);
   void validate();
   void invalidate();
@@ -482,13 +484,15 @@ public:
   int initialScan(Image *fg,double time);
   int initialRefs(Image *fg,ManagedList<Point>& locations,double time);
   // 8 bit versions
-  int initialScan8(Image8 *fg,double time);
-  int initialRefs8(Image8 *fg,ManagedList<Point>& locations,double time);
+  int initialScan8(Image8 *fg, double time);
+  int initialRefs8(Image8 *fg, ManagedList<Point>& locations, double time);
   
   int anticipateNext(double time);
   bool findNextItemBounds(Rectangle& im_bound);
   void loadNextSingleItem(Image* fg);
-  void readyNext(Image *fg,double time);
+  void loadNextSingleItem8(Image8* fg);
+  void readyNext(Image *fg, double time);
+  void readyNext8(Image8 *fg, double time);
   int findNext();
   
 	// Image correction 

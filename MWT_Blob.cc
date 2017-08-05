@@ -399,6 +399,27 @@ void Blob::clip(const Blob& last,Image* fg,Image* bg,int border)
 }
 
 
+// Clip out an expected blob given the last known location and a foreground image
+// Background image is optional; can be subtracted.
+void Blob::clip8(const Blob& last, Image8* fg, Image* bg, int border)
+{
+  if (im!=NULL) { delete im; im=NULL; }
+  Rectangle r = last.findNextROI(bg,border);
+  r *= fg->getBounds();
+  if (r.area()<1) {
+    return;
+  }
+  
+  im = new Image(r, fg->divide_bg);
+  if (bg)
+  {
+    im->depth = 9;
+    im->diffCopy8(r.near, *fg, r.size(), *bg);
+  }
+  else im->copy8(r.near, *fg, r.size());
+}
+
+
 // Find blob(s) inside a clipped-out image and store potential matches inside dancer->candidates.
 // This also uses the size threshold criteria of this blob's dancer and overlap with
 // the previous blob.
@@ -698,6 +719,22 @@ void Dancer::readyAnother(Image* fg,Image* bg,int frame,double time)
   movie.t().dancer = this;
   movie.t().clip( old_blob , fg , bg , border );
 	
+  frames.hi() = frame;
+  times.hi() = time;
+  validated = false;
+}
+
+
+// Get ready to look for a new blob
+void Dancer::readyAnother8(Image8* fg, Image* bg, int frame, double time)
+{
+  Blob& old_blob = movie.t();
+  
+  new( movie.Append() ) Blob(frame,time);
+  
+  movie.t().dancer = this;
+  movie.t().clip8( old_blob , fg , bg , border );
+  
   frames.hi() = frame;
   times.hi() = time;
   validated = false;
@@ -1386,8 +1423,43 @@ void Performance::loadNextSingleItem(Image* fg)
 }
   
 
+// Load the bit of image for one item in the next image
+void Performance::loadNextSingleItem8(Image8* fg)
+{
+  switch (load_state)
+  {
+    case no_state:
+      break;
+    case check_sitter:
+      break;
+    case check_dancer:
+      break;
+    case check_band:
+      break;
+    case load_sitter:
+      sitters.i().readyAnother8(fg, NULL, current_frame, current_time);
+      load_state = check_sitter;
+      break;
+    case load_dancer: 
+      dancers.i().readyAnother8(fg, background, current_frame, current_time);
+      load_state = check_dancer;
+      break;
+    case load_band:
+      // We already prepared the image when we checked it, so we just need to load it
+      band->depth = 9;
+      *band = 256;  // Initialize to gray
+      band->diffAdaptCopy8(*fg, *band_area, *background, adapt_rate);
+      load_state = all_loaded;
+      break;
+    case all_loaded:
+    default:
+      break;
+  }
+}
+  
+
 // Load data into appropriate images--use the one-item-at-a-time routines above
-void Performance::readyNext(Image* fg,double time)
+void Performance::readyNext(Image* fg, double time)
 {
   anticipateNext(time);
   
@@ -1395,6 +1467,19 @@ void Performance::readyNext(Image* fg,double time)
   while (findNextItemBounds(single_bound))
   {
     loadNextSingleItem(fg);
+  }
+}
+
+
+// Load data into appropriate images--use the one-item-at-a-time routines above
+void Performance::readyNext8(Image8* fg, double time)
+{
+  anticipateNext(time);
+  
+  Rectangle single_bound;
+  while (findNextItemBounds(single_bound))
+  {
+    loadNextSingleItem8(fg);
   }
 }
 
