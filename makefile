@@ -11,8 +11,8 @@ ifeq ($(OS),Windows_NT)
     OUTDIR = lib
     TGT = -DWINDOWS 
 else
-#   CC = g++ -std=c++11
-    CC = clang++ -std=c++11 -DCLANG_WORKAROUND
+    CC = g++ -std=gnu++11
+#   CC = clang++ -std=c++11 -DCLANG_WORKAROUND
     TGT = -DLINUX
 endif
 

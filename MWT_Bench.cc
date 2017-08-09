@@ -69,7 +69,6 @@ void yell(int i, int j, int e) {
     if (i != j) printf("%d!%d ", e, j);
 }
 
-#define EIGHT
 int main(int argn, char *argv[]) {
     timeval t0; gettimeofday(&t0, NULL);
 #ifdef EIGHT
