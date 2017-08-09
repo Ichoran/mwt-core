@@ -35,6 +35,7 @@
 
 2007*
 unit*
+*.raw
 *.tiff
 *.log
 /.project
