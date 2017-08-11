@@ -2475,8 +2475,10 @@ void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
           rare(m.i().x,y) = (I_fg<<9) / (1 + I_fg + (unsigned int)(bg.view(m.i().x,y)>>shift));
         }
         else {
-          unsigned short qy = source.viewS(m.i().x, y);
-          for (y=y0;y<y1;y+=2) rareI(m.i().x,y) = (dualgray + (qy & 0xFF) + ((int)(qy&0xFF00) << 8)) - ((bg.viewI(m.i().x,y)>>shift)&dualshiftmask);
+          for (y=y0;y<y1;y+=2) {
+            unsigned short qy = source.viewS(m.i().x, y);
+            rareI(m.i().x,y) = (dualgray + (qy & 0xFF) + ((int)(qy&0xFF00) << 8)) - ((bg.viewI(m.i().x,y)>>shift)&dualshiftmask);
+          }
           for (;y<=y1;y++) rare(m.i().x,y) = source.view(m.i().x,y) - (bg.view(m.i().x,y)>>shift) + gray;
         }
       }
