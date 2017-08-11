@@ -1459,6 +1459,14 @@ void FloodData::duplicate(const FloodData& fd)
                          Image Methods
 ****************************************************************/
 
+// Debugging methods to defer 8-bit input to a simple copy to
+// scratch space plus a call to the corresponding 16 bit method
+//#define DEFER_MIMIC
+//#define DEFER_COPY
+//#define DEFER_ADAPT
+//#define DEFER_DIFFC
+//#define DEFER_DAC
+
 
 // Make a new image that copies a rectangular region of another
 // If the old image is binned, it gets a copy of the binned (not original) version
@@ -1480,6 +1488,19 @@ Image::Image(const Image& existing,const Rectangle& region, bool algo) : bin(0),
   owns_pixels = true;
   
   copy(bounds.near , existing , size);
+}
+
+Image* Image::identical() const {
+  Image* im = new Image();
+  im->pixels = new short[ bounds.area() ];
+  im->bounds = bounds;
+  im->size = size;
+  im->bin = bin;
+  im->depth = depth;
+  im->owns_pixels = true;
+  im->divide_bg = divide_bg;
+  memcpy(im->pixels, pixels, bounds.area()*sizeof(short));
+  return im;
 }
 
 
@@ -1750,6 +1771,11 @@ void Image::mimic(const Image& source,Rectangle my_region,Rectangle source_regio
 // Copy a source image with resizing/rescaling so both images show the same scene
 void Image::mimic8(const Image8& source, Rectangle my_region, Rectangle source_region, ScaleType method)
 {
+#ifdef DEFER_MIMIC
+  Image* temp = source.identical16();
+  mimic(*temp, my_region, source_region, method);
+  delete temp;
+#else
   // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
   // Convert region to point directly to image pixels
   if (bin > 1) my_region *= bin;
@@ -1833,6 +1859,7 @@ void Image::mimic8(const Image8& source, Rectangle my_region, Rectangle source_r
     }
   }
   // No else clause--just do nothing for invalid image rescaling method
+#endif
 }
 void Image::mimic8(const Image8& source , ScaleType method) { 
   mimic8(source,getBounds(),source.getBounds(),method); 
@@ -1957,6 +1984,11 @@ void Image::copy(const Image& source,Mask& m,bool fix_depth)
 // Copy a source image onto (a part of) the existing image
 void Image::copy8(Point where, const Image8& source, Point size, bool fix_depth)
 { 
+#ifdef DEFER_COPY
+  Image* temp = source.identical16();
+  copy(where, *temp, size, fix_depth);
+  delete temp;
+#else
   // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
   int x,y;
   if (depth == 8) fix_depth = false;
@@ -1996,6 +2028,7 @@ void Image::copy8(Point where, const Image8& source, Point size, bool fix_depth)
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , ((short)source.get(x,y))>>shift);
     }
   }
+#endif
 }
 void Image::copy8(const Image8& source, bool fix_depth) { 
   copy8( source.bounds.near , source , source.size , fix_depth );
@@ -2005,6 +2038,11 @@ void Image::copy8(const Image8& source, bool fix_depth) {
 // Same thing except copy using a mask
 void Image::copy8(const Image8& source, Mask& m, bool fix_depth)
 {
+#ifdef DEFER_COPY
+  Image* temp = source.identical16();
+  copy(*temp, m, fix_depth);
+  delete temp;
+#else
   // WARNING!  You must keep this up to date with the other three implementations BY HAND!! (8->8, 8->16, 16->16 bits)
   int y,y0,y1;
   
@@ -2052,6 +2090,7 @@ void Image::copy8(const Image8& source, Mask& m, bool fix_depth)
       }
     }
   }
+#endif
 }
 
 
@@ -2139,6 +2178,11 @@ void Image::adapt(const Image& im,Mask &m,int rate)
 // Adapt an image so that it is closer to a source image; requires rate>=0 and rate >= our depth - 8
 void Image::adapt8(Point where, const Image8& im, Point size, int rate)
 {
+#ifdef DEFER_ADAPT
+  Image* temp = im.identical16();
+  adapt(where, *temp, size, rate);
+  delete temp;
+#else
   // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
   int x,y;
   bool irlz = false;
@@ -2167,11 +2211,17 @@ void Image::adapt8(Point where, const Image8& im, Point size, int rate)
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) { I = get(x,y); set(x,y, I + (((short)im.get(x,y))>>imrate) - (I>>rate)); }
     }
   }
+#endif
 }
 
 // Same thing except adapt using a mask
 void Image::adapt8(const Image8& im, Mask &m, int rate)
 {
+#ifdef DEFER_ADAPT
+  Image* temp = im.identical16();
+  adapt(*temp, m, rate);
+  delete temp;
+#else
   // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
   int y,y0,y1;
   bool irlz = false;
@@ -2214,6 +2264,7 @@ void Image::adapt8(const Image8& im, Mask &m, int rate)
       }
     }
   }
+#endif
 }
 
 
@@ -2336,13 +2387,20 @@ void Image::diffCopy(const Image& source,Mask& m,const Image& bg)
 // Does not scale the bit depth for the background image!  It's assumed to be one more than the source.  Make sure there's room!
 // Division method adds 1 to fg & bg values to avoid errors with zeros (0/whatever = 0, whatever/0 = error).
 void Image::diffCopy8(Point where, const Image8& source, Point size, const Image& bg)
-{ 
+{
+#ifdef DEFER_DIFFC
+  Image* temp = source.identical16();
+  diffCopy(where, *temp, size, bg);
+  delete temp;
+#else 
   // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
   int x,y;
-  short gray = 1 << bg.depth;
-  short shift = (bg.depth > 8) ? bg.depth-8 : 0;
+  short gray = 256;
+  short shift = (8<bg.depth) ? bg.depth-8 : 0;
   if (bin <= 1 && source.bin <= 1) { // Fast shortcut--grab memory directly
+    int shiftmask = 0xFFFF>>shift;
     int dualgray = ((int)gray) | (((int)gray)<<16);
+    int dualshiftmask = shiftmask | (shiftmask<<16);
 
     Point swhere = where-source.bounds.near;
     Point bgwhere = where - bg.bounds.near;
@@ -2352,57 +2410,57 @@ void Image::diffCopy8(Point where, const Image8& source, Point size, const Image
     short *g = bg.pixels + (bgwhere.x*bg.size.y + bgwhere.y);
     
     if (divide_bg) { // This is 2*fg/(fg+bg) . . . slower but better for large changes in background!
-      int divshift = bg.depth + 1;
-      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) for (y=0;y<size.y;y++) {
-        unsigned int qq = 1 + (((unsigned int) q[y]) << shift);
-        p[y] = (qq << divshift) / (qq + (unsigned int)g[y] + 1);
-      }
+      for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) for (y=0;y<size.y;y++)
+          p[y] = ((1+(unsigned int)q[y])<<9) / ((unsigned int)q[y] + (unsigned int)(g[y]>>shift) + 2);
     }          
     else { // This is just fg-bg . . . fast!  (Even faster when we use an int to do two short operations at once.)
       for (x=0 ; x<size.x ; x++ , q += source.size.y , p += this->size.y , g += bg.size.y) {
         for (y=0;y<size.y-1;y+=2) {
-          uint16_t qy = *(uint16_t*)(q + y);
-          int qq = ((((int)(qy & 0xFF00)) << 8) | (qy & 0xFF)) << shift;
-          *(int*)(p+y) = dualgray + qq - (*(int*)(g+y));
+          unsigned short qy = *(unsigned short*)(q+y);
+          *(int*)(p+y) = (dualgray + (qy & 0xFF) + ((int)(qy & 0xFF00) << 8)) - (((*(int*)(g+y))>>shift)&dualshiftmask);
         }
-        for (;y<size.y;y++) p[y] = (((short)q[y]) << shift) - g[y] + gray;
+        for (;y<size.y;y++) p[y] = (short)q[y] - (g[y]>>shift) + gray;
       }
     }
   }
   else {
     Point stop = where + size;
     if (divide_bg) {
-      int divshift = bg.depth + 1;
+      unsigned int I_fg;
       if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
-        unsigned int I_fg = 1 + (((unsigned int)source.get(x,y)) << shift);
-        rare(x,y) = (I_fg<<divshift) / (1 + I_fg + bg.get(x,y));
+        I_fg = 1 + (unsigned int)source.get(x,y);
+        rare(x,y) = (I_fg<<9) / (1 + I_fg + (unsigned int)(bg.get(x,y)>>shift));
       }
       else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
-        unsigned int I_fg = 1 + (((unsigned int)source.get(x,y)) << shift);
-        set(x,y , (I_fg<<divshift) / (1 + I_fg + bg.get(x,y)) );
+        I_fg = 1 + (unsigned int)source.get(x,y);
+        set(x,y , (I_fg<<9) / (1 + I_fg + (unsigned int)(bg.get(x,y)>>shift)) );
       }
     }
     else {
-      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
-        rare(x,y) = (((short)source.get(x,y)) << shift) - bg.get(x,y) + gray;
-      }
-      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
-        set(x,y , (((short)source.get(x,y)) << shift) - bg.get(x,y) + gray);
-      }
+      if (bin<=1) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) = source.get(x,y) - (bg.get(x,y)>>shift) + gray;
+      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) set(x,y , source.get(x,y) - (bg.get(x,y)>>shift) + gray);
     }
   }
+#endif
 }
 
 // Same thing except copy using a mask
 void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
 {
+#ifdef DEFER_DIFFC
+  Image* temp = source.identical16();
+  diffCopy(*temp, m, bg);
+  delete temp;
+#else
   // WARNING!  You must keep this up to date with the 16-bit-source implementation BY HAND!!
   int y,y0,y1;
   unsigned int I_fg;
-  short gray = 1 << bg.depth;
-  short shift = (bg.depth > 8) ? bg.depth-8 : 0;
+  short gray = 256;
+  short shift = (8<bg.depth) ? bg.depth-8 : 0;
   if (bin<=1 && source.bin<=1) {
+    int shiftmask = 0xFFFF>>shift;
     int dualgray = ((int)gray) | (((int)gray)<<16);
+    int dualshiftmask = shiftmask | (shiftmask<<16);
 
     Rectangle safe = bounds * source.bounds;
     m.start();
@@ -2412,20 +2470,14 @@ void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0<=y1) {
-        if (divide_bg) {
-          int divshift = bg.depth + 1;
-          for (y=y0;y<=y1;y++) {
-            I_fg = 1 + (((unsigned int)source.view(m.i().x,y)) << shift);
-            rare(m.i().x,y) = (I_fg<<divshift) / (1 + I_fg + (unsigned int)(bg.view(m.i().x,y)));
-          }
+        if (divide_bg) for (y=y0;y<=y1;y++) {
+          I_fg = 1+(unsigned int)source.view(m.i().x,y);
+          rare(m.i().x,y) = (I_fg<<9) / (1 + I_fg + (unsigned int)(bg.view(m.i().x,y)>>shift));
         }
         else {
-          for (y=y0;y<y1;y+=2) {
-            unsigned short sy = source.viewS(m.i().x,y);
-            int iyy = ((((int)(sy & 0xFF00)) << 8) | (sy & 0xFF)) << shift;
-            rareI(m.i().x,y) = dualgray + iyy - bg.viewI(m.i().x,y);
-          }
-          for (;y<=y1;y++) rare(m.i().x,y) = (((short)source.view(m.i().x,y)) << shift) - bg.view(m.i().x,y) + gray;
+          unsigned short qy = source.viewS(m.i().x, y);
+          for (y=y0;y<y1;y+=2) rareI(m.i().x,y) = (dualgray + (qy & 0xFF) + ((int)(qy&0xFF00) << 8)) - ((bg.viewI(m.i().x,y)>>shift)&dualshiftmask);
+          for (;y<=y1;y++) rare(m.i().x,y) = source.view(m.i().x,y) - (bg.view(m.i().x,y)>>shift) + gray;
         }
       }
     }
@@ -2440,23 +2492,23 @@ void Image::diffCopy8(const Image8& source, Mask& m, const Image& bg)
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0<=y1) {
         if (divide_bg) {
-          int divshift = bg.depth + 1;
           if (bin<=1) for (y=y0;y<=y1;y++) {
-            I_fg = 1 + (((unsigned int)source.get(m.i().x,y)) << shift);
-            rare(m.i().x,y) = (I_fg<<divshift)/(1 + I_fg + (unsigned int)bg.get(m.i().x,y));
+            I_fg = 1+(unsigned int)source.get(m.i().x,y);
+            rare(m.i().x,y) = (I_fg<<9)/(1 + I_fg + (unsigned int)(bg.get(m.i().x,y)>>shift));
           }
           else for (y=y0;y<=y1;y++) {
-            I_fg = 1 + (((unsigned int)source.get(m.i().x,y)) << shift);
-            set(m.i().x,y , (I_fg<<divshift) / (1 + I_fg + (unsigned int)bg.get(m.i().x,y)) );
+            I_fg = 1+(unsigned int)source.get(m.i().x,y);
+            set(m.i().x,y , (I_fg<<9) / (1 + I_fg + (unsigned int)(bg.get(m.i().x,y)>>shift)) );
           }
         }
         else {
-          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = ((short)source.get(m.i().x,y) << shift) - bg.get(m.i().x,y) + gray;
-          else for (y=y0;y<=y1;y++) set(m.i().x , y , ((short)source.get(m.i().x,y) << shift) - bg.get(m.i().x,y) + gray );
+          if (bin<=1) for (y=y0;y<=y1;y++) rare(m.i().x,y) = source.get(m.i().x,y) - (bg.get(m.i().x,y)>>shift) + gray;
+          else for (y=y0;y<=y1;y++) set(m.i().x , y , source.get(m.i().x,y) - (bg.get(m.i().x,y)>>shift) + gray );
         }
       }
     }
   }
+#endif
 }
 
 
@@ -2658,6 +2710,11 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate)
 // Copy an image with background subtraction and gray offset and adapt the background
 void Image::diffAdaptCopy8(Point where, const Image8& source, Point size, Image& bg, int rate)
 { 
+#ifdef DEFER_DAC
+  Image* temp = source.identical16();
+  diffAdaptCopy(where, *temp, size, bg, rate);
+  delete temp;
+#else
   // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int x,y;
   short gray = 1 << 8;
@@ -2743,11 +2800,17 @@ void Image::diffAdaptCopy8(Point where, const Image8& source, Point size, Image&
       }
     }
   }
+#endif
 }
 
 // Same thing except copy using a mask
 void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
 {
+#ifdef DEFER_DAC
+  Image* temp = source.identical16();
+  diffAdaptCopy(*temp, m, bg, rate);
+  delete temp;
+#else
   // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int y,y0,y1;
   int x,I_fg;
@@ -2768,7 +2831,7 @@ void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
     int dualsrcratemask = srcratemask | (srcratemask<<16);  
   
     Rectangle safe = bounds * source.bounds * bg.bounds;
-    
+
     m.start();
     while (m.advance()) {
       if (m.i().beyond( safe.far )) break;
@@ -2854,6 +2917,7 @@ void Image::diffAdaptCopy8(const Image8& source, Mask& m, Image& bg, int rate)
       }
     }
   }
+#endif
 }
 
 
@@ -3254,6 +3318,22 @@ Image8::Image8(const Image8& existing, const Rectangle& region, bool algo) : bin
   copy(bounds.near , existing , size);
 }
 
+
+Image* Image8::identical16() const {
+  Image* im = new Image();
+  im->pixels = new short[ bounds.area() ];
+  im->bounds = bounds;
+  im->size = size;
+  im->bin = bin;
+  im->depth = 8;
+  im->owns_pixels = true;
+  im->divide_bg = divide_bg;
+  int N = bounds.area();
+  short *p = im->pixels;
+  uint8_t *q = pixels;
+  while (N > 0) { *p = *q; p++; q++; N--; }
+  return im;
+}
 
 // Draw rectangles on an image8
 void Image8::set(Rectangle r, uint8_t I)

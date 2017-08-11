@@ -1070,6 +1070,35 @@ int TrackerLibrary::showLoaded(int handle,Image& im)
   return handle; 
 }
 
+// Show what we've loaded (on an 8 bit image)
+int TrackerLibrary::showLoaded8(int handle,Image8& im)
+{
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+  if (!te->image_loaded) return 0;
+  im.divide_bg = te->performance.use_division;
+  Performance& p = te->performance;
+  
+  if (p.band != NULL && p.band_area !=NULL)
+  {
+    im.copy16(*p.band,*p.band_area,true);
+  }
+  if (p.dancers.size > 0)
+  {
+    p.dancers.start();
+    while (p.dancers.advance())
+    {
+      if (p.dancers.i().movie.size==0) continue;
+      if (p.dancers.i().movie.t().im==NULL) continue;
+      im.copy16( *(p.dancers.i().movie.t().im) , true );
+    }
+  }
+  
+  return handle; 
+}
+
 // Add an integer event number to our summary data to mark stimuli, etc.
 int TrackerLibrary::markEvent(int handle,int event)
 {
@@ -1261,6 +1290,29 @@ int TrackerLibrary::showResults(int handle,Image& im)
   short colorO = p.blob_is_dark ? white : 1;
   short colorC = p.blob_is_dark ? 1 : white;
   p.imprint(&im , 0 , 3 , white , 2 , colorO , true , colorR , true , colorC , 2);  
+  return handle;
+}
+
+// Write back to the image so we can see what happened
+int TrackerLibrary::showResults8(int handle,Image8& im)
+{
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+  if (!te->image_info_known || !te->border_size_known || !te->object_intensities_known || 
+      !te->object_sizes_known || !te->adaptation_rate_known || !te->object_persistence_known ||
+      !te->reference_intensities_known)
+  {
+    return 0;
+  }
+  im.divide_bg = te->performance.use_division;
+  Performance& p = te->performance;
+  short white = 255;
+  short colorR = p.blob_is_dark ? 1 : white;  // Reference object will be oppositely colored from object
+  short colorO = p.blob_is_dark ? white : 1;
+  short colorC = p.blob_is_dark ? 1 : white;
+  p.imprint8(&im , 0 , 3 , white , 2 , colorO , true , colorR , true , colorC , 2);  
   return handle;
 }
 
@@ -1521,6 +1573,46 @@ float TrackerLibrary::reportObjectPixelCount(int handle)
                     Unit Test-Style Functions
 ****************************************************************/
 
+int test_mwt_library_has_same_worm_pictures(TrackerLibrary& a_library, int W, int bin, int h, int hh, bool close_ok) {
+  auto u = &a_library.all_trackers[h]->performance.dancers;
+  auto v = &a_library.all_trackers[hh]->performance.dancers;
+
+  int white = 256;
+  int div = 1;
+  while (white < W) { white *= 2; div *= 2; }
+
+  u->start();
+  v->start();
+  while (u->advance()) {
+    if (!v->advance()) return 1;
+    if (u->i().movie.t().pixel_count != v->i().movie.t().pixel_count) return 2;
+    auto r = u->i().movie.t().im;
+    auto s = v->i().movie.t().im;
+    if (r->size != s->size) return 3;
+    Rectangle b = r->getBounds();
+    if (b != s->getBounds()) return 4;
+    for (int x = b.near.x; x <= b.far.x; x++) for (int y = b.near.y; y <= b.far.y; y++) {
+      short p = r->get(x,y);
+      short pd = p/div;
+      short q = s->get(x,y);
+      if (!( 
+        (p==1 && q==1) || (p==(W-1) && q==255) ||
+        (
+          pd == q ||
+          (close_ok && (pd + 2 > q && q+2 > pd))
+        ) 
+      )) {
+        r->println();
+        s->println();
+        printf("At %d, %d with binning %d: %d vs %d\n", x, y, bin, p, q);
+        return 4;
+      }
+    }
+  }
+  if (v->advance()) return 5;
+  return 0;
+}
+
 int test_mwt_library(int bin)
 {
   TrackerLibrary a_library;
@@ -1532,6 +1624,8 @@ int test_mwt_library(int bin)
   Image arena( Point(512,512), false );
   arena.depth = 10;
   int W = 1<<10;
+
+  Image8 arena8( Point(512,512), false );
   
   ModelCamera cam(arena);
 #ifdef WINDOWS
@@ -1557,43 +1651,85 @@ int test_mwt_library(int bin)
   worm3.setSize(50,3.0);
   worm3.setWiggle(5.0,35,0.72,0.01);
   
-  int i;
+  int i, err;
   int h1 = a_library.getNewHandle();
   int h2 = a_library.getNewHandle();
+  int h3 = a_library.getNewHandle();
+  int h4 = a_library.getNewHandle();
   a_library.setCombineBlobs(h1,true);
   a_library.setCombineBlobs(h2,true);
-  if (h1!=1 || h2!=2) return 1;
+  a_library.setCombineBlobs(h3,true);
+  a_library.setCombineBlobs(h4,true);
+  if (h1!=1 || h2!=2 || h3!=3 || h4!=4) return 1;
   i = a_library.setImageInfo(h1,10,512/bin,512/bin); if (i!=h1) return 2;
   i = a_library.setImageInfo(h2,10,512/bin,512/bin); if (i!=h2) return 3;
+  i = a_library.setImageInfo(h3,8,512/bin,512/bin); if (i!=h3) return 102;
+  i = a_library.setImageInfo(h4,8,512/bin,512/bin); if (i!=h4) return 103;
   i = a_library.setDate(h1,2007,12,26,10,50,33); if (i!=h1) return 4;
   i = a_library.borrowDate(h2,h1); if (i!=h2) return 5;
+  i = a_library.borrowDate(h3,h1); if (i!=h3) return 104;
+  i = a_library.borrowDate(h4,h1); if (i!=h4) return 105;
   i = a_library.setOutput(h1,".","test",true,false,false); if (i!=h1) return 6;
   i = a_library.setOutput(h2,".","tset",false,true,false); if (i!=h2) return 7;
+  i = a_library.setOutput(h3,".","tezt",true,false,false); if (i!=h3) return 106;
+  i = a_library.setOutput(h4,".","tzet",false,true,false); if (i!=h4) return 107;
   i = a_library.setRectangle(h1,5/bin,(256+200)/bin,5/bin,(256+180)/bin); if (i!=h1) return 8;
   i = a_library.addRectangle(h1,100/bin,(250+256)/bin,80/bin,(256+250)/bin); if (i!=h1) return 9;
   i = a_library.setEllipse(h2,30/bin,(220+256)/bin,25/bin,25/bin); if (i!=h2) return 10;
+  i = a_library.setRectangle(h3,5/bin,(256+200)/bin,5/bin,(256+180)/bin); if (i!=h3) return 108;
+  i = a_library.addRectangle(h3,100/bin,(250+256)/bin,80/bin,(256+250)/bin); if (i!=h3) return 109;
+  i = a_library.setEllipse(h4,30/bin,(220+256)/bin,25/bin,25/bin); if (i!=h4) return 110;
   
   arena = (3*W)/4;
   arena.bin = bin;
+  arena8 = (3*256)/4;
+  arena8.bin = bin;
   i = a_library.showROI(h1,arena); if (i!=h1) return 11;
   i = a_library.showROI(h2,arena); if (i!=h2) return 12;
+  i = a_library.showROI8(h3,arena8); if (i!=h3) return 111;
+  i = a_library.showROI8(h4,arena8); if (i!=h4) return 112;
+  for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
+    unsigned short u = arena.get(x,y);
+    unsigned short v = arena8.get(x,y);
+    if (!( (u==1 && v==1) || (u==(W-1) && v==255) || ((u >> 2) == v) )) {
+      printf("At %d, %d with binning %d: %d vs %d\n", x, y, bin, arena.get(x,y), arena8.get(x,y));
+      return 200;
+    }
+  }
   arena <<= 6; arena.writeTiff("test_two_ROIs.tiff");
   arena.bin = 0;
+  arena8.bin = 0;
   
-  i = a_library.setDancerBorderSize(h1,10/bin); i = a_library.setDancerBorderSize(h2,10/bin);
+  i = a_library.setDancerBorderSize(h1,10/bin);
+  i = a_library.setDancerBorderSize(h2,10/bin);
+  i = a_library.setDancerBorderSize(h3,10/bin);
+  i = a_library.setDancerBorderSize(h4,10/bin);
   i = a_library.setRefIntensityThreshold(h1,1,W/2); if (i!=h1) return 13;
   i = a_library.setRefIntensityThreshold(h2,1,W/2); if (i!=h2) return 14;
+  i = a_library.setRefIntensityThreshold(h3,1,128); if (i!=h3) return 113;
+  i = a_library.setRefIntensityThreshold(h4,1,128); if (i!=h4) return 114;
   i = a_library.addReferenceObjectLocation(h2,35/bin,(256+220)/bin); if (i!=h2) return 15;
+  i = a_library.addReferenceObjectLocation(h4,35/bin,(256+220)/bin); if (i!=h4) return 115;
   i = a_library.setObjectIntensityThresholds(h1,W-W/20,W-W/8); if (i!=h1) return 16;
   i = a_library.setObjectIntensityThresholds(h2,W-W/20,W-W/8); if (i!=h2) return 17;
+  i = a_library.setObjectIntensityThresholds(h3,256-256/20,256-256/8); if (i!=h3) return 116;
+  i = a_library.setObjectIntensityThresholds(h4,256-256/20,256-256/8); if (i!=h4) return 117;
   i = a_library.setObjectSizeThresholds(h1,30/(bin*bin),50/(bin*bin),10000/(bin*bin),15000/(bin*bin)); if (i!=h1) return 18;
   i = a_library.setObjectSizeThresholds(h2,30/(bin*bin),50/(bin*bin),10000/(bin*bin),15000/(bin*bin)); if (i!=h2) return 19;
+  i = a_library.setObjectSizeThresholds(h3,30/(bin*bin),50/(bin*bin),10000/(bin*bin),15000/(bin*bin)); if (i!=h3) return 118;
+  i = a_library.setObjectSizeThresholds(h4,30/(bin*bin),50/(bin*bin),10000/(bin*bin),15000/(bin*bin)); if (i!=h4) return 119;
   i = a_library.setObjectPersistenceThreshold(h1,8); if (i!=h1) return 20;
   i = a_library.setObjectPersistenceThreshold(h2,8); if (i!=h2) return 21;
+  i = a_library.setObjectPersistenceThreshold(h3,8); if (i!=h3) return 120;
+  i = a_library.setObjectPersistenceThreshold(h4,8); if (i!=h4) return 121;
   i = a_library.setAdaptationRate(h1,4); if (i!=h1) return 22;
   i = a_library.setAdaptationRate(h2,4); if (i!=h2) return 23;
+  i = a_library.setAdaptationRate(h3,4); if (i!=h3) return 124;
+  i = a_library.setAdaptationRate(h4,4); if (i!=h4) return 125;
   if (bin==1) { i = a_library.enableOutlining(h1,true); if (i!=h1) return 24; }
   else { i = a_library.enableSkeletonization(h1,true); if (i!=h1) return 24; }
+  if (bin==1) { i = a_library.enableOutlining(h3,true); if (i!=h3) return 124; }
+  else { i = a_library.enableSkeletonization(h3,true); if (i!=h3) return 124; }
   
   char s[1024];
   Mask m(128);
@@ -1604,23 +1740,55 @@ int test_mwt_library(int bin)
     worm2.imprint(arena,m,0.5,2);
     worm3.imprint(arena,m,0.5,2);
     arena.set( Rectangle( Point(33,256+215) , Point(36,256+222) ) , W/3 );
+    arena8.copy16(arena, true);
+    arena.copy8(arena8, true);
+    for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
+      unsigned short u = arena.get(x,y);
+      unsigned short v = arena8.get(x,y);
+      if (!( (u==1 && v==1) || (u==(W-1) && v==255) || ((u >> 2) == v) )) {
+        printf("At %d, %d with binning %d: %d vs %d\n", x, y, bin, arena.get(x,y), arena8.get(x,y));
+        return 201;
+      }
+    }
     
     arena.bin = bin;
-    i = a_library.scanObjects(h1,arena);
-    if (j>2 && (i<2 || i>3)) return 25;
+    arena8.bin = bin;
+    i = a_library.scanObjects(h1,arena); if (j>2 && (i<2 || i>3)) return 25;
+    i = a_library.scanObjects8(h3,arena8); if (j>2 && (i<2 || i>3)) return 125;
+
     i = a_library.scanRefs(h1,arena); if (i!=0) return 26;
+    i = a_library.scanRefs8(h3,arena8); if (i!=0) return 126;
     
     i = a_library.scanObjects(h2,arena); if (i!=0) return 27;
     i = a_library.scanRefs(h2,arena); if (i!=1) return 28;
+    i = a_library.scanObjects8(h4,arena8); if (i!=0) return 127;
+    i = a_library.scanRefs8(h4,arena8); if (i!=1) return 128;
     
     i = a_library.showObjects(h1,arena); if (i!=h1) return 29;
     i = a_library.showRefs(h1,arena); if (i!=h1) return 30;
     i = a_library.showObjects(h2,arena); if (i!=h2) return 31;
     i = a_library.showRefs(h2,arena); if (i!=h2) return 32;
+    i = a_library.showObjects8(h3,arena8); if (i!=h3) return 129;
+    i = a_library.showRefs8(h3,arena8); if (i!=h3) return 130;
+    i = a_library.showObjects8(h4,arena8); if (i!=h4) return 131;
+    i = a_library.showRefs8(h4,arena8); if (i!=h4) return 132;
+    for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
+      unsigned short u = arena.get(x,y);
+      unsigned short v = arena8.get(x,y);
+      if (!( (u==1 && v==1) || (u==(W-1) && v==255) || ((u >> 2) == v) )) {
+        printf("At %d, %d with binning %d: %d vs %d\n", x, y, bin, arena.get(x,y), arena8.get(x,y));
+        return 202;
+      }
+    }
+
+    err = test_mwt_library_has_same_worm_pictures(a_library, W, bin, h1, h3, true); if (err != 0) return 210+err;
+    // Reserve error codes up to 219 here
+    
     arena<<=6;
     sprintf(s,"test_lib_track_%02d.tiff",j);
     arena.writeTiff(s);
     arena.bin = 0;
+    arena8.bin = 0;
     
     worm1.wiggle(0.4);
     worm2.wiggle(0.4);
@@ -1630,11 +1798,17 @@ int test_mwt_library(int bin)
   // Make sure error-checking is working; shouldn't be able to process images without loading them!
   i = a_library.processImage(h1); if (i!=0) return 33;
   i = a_library.processImage(h2); if (i!=0) return 34;
+  i = a_library.processImage(h3); if (i!=0) return 133;
+  i = a_library.processImage(h4); if (i!=0) return 134;
   
   i = a_library.beginOutput(h1); if (i!=h1) return 35;
   i = a_library.beginOutput(h2); if (i!=h2) return 36;
+  i = a_library.beginOutput(h3); if (i!=h3) return 135;
+  i = a_library.beginOutput(h4); if (i!=h4) return 136;
   i = a_library.setUpdateBandNumber(h1,12); if (i!=h1) return 37;
   i = a_library.setVelocityIntegrationTime(h1,1.2); if (i!=h1) return 38;
+  i = a_library.setUpdateBandNumber(h3,12); if (i!=h3) return 137;
+  i = a_library.setVelocityIntegrationTime(h3,1.2); if (i!=h3) return 138;
   
 #ifndef PERFORMANCE_TEST
   Image temp_im( Point(300,280), false );
@@ -1649,36 +1823,91 @@ int test_mwt_library(int bin)
     worm2.imprint(arena,m,0.4,2);
     worm3.imprint(arena,m,0.4,2);
     arena.set( Rectangle( Point(33,256+215) , Point(36,256+222) ) , W/3 );
+    arena8.copy16(arena, true);
+    arena.copy8(arena8, true);
     
     arena.bin = bin;
+    arena8.bin = bin;
     if ((j%1)==0)
     {
-      i = a_library.loadImage(h1,arena,0.4*j); if (i!=h1) return 39;  // Wholistic image loading
+      i = a_library.loadImage(h1,arena,0.4*j); if (i!=h1) return 39;  // Holistic image loading
+      i = a_library.loadImage8(h3,arena8,0.4*j); if (i!=h3) return 139;  // Holistic image loading
+      /*
+      for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
+        unsigned short u = arena.get(x,y);
+        unsigned short v = arena8.get(x,y);
+        if (!( (u==1 && v==1) || (u==(W-1) && v==255) || ((u >> 2) == v) )) {
+          printf("At %d, %d with binning %d: %d vs %d\n", x, y, bin, arena.get(x,y), arena8.get(x,y));
+          return 220;
+        }
+      }
+      */
     }
     else
     {
       i = a_library.prepareImagePieces(h1,0.4*j); printf("%d\n",i);
+      i = a_library.prepareImagePieces(h3,0.4*j); printf("%d\n",i);
       Rectangle r;
-      while (a_library.getNextPieceCoords(h1,r)==h1)
-      {
+      while (a_library.getNextPieceCoords(h1,r)==h1) {
         i = a_library.loadThisImagePiece(h1,arena); if (i!=h1) return 40;
       }
+      while (a_library.getNextPieceCoords(h3,r)==h3) {
+        i = a_library.loadThisImagePiece8(h3,arena8); if (i!=h3) return 140;
+      }
+      /*
+      for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
+        unsigned short u = arena.get(x,y);
+        unsigned short v = arena8.get(x,y);
+        if (!( (u==1 && v==1) || (u==(W-1) && v==255) || ((u >> 2) == v) )) {
+          printf("At %d, %d with binning %d: %d vs %d\n", x, y, bin, arena.get(x,y), arena8.get(x,y));
+          return 221;
+        }
+      }
+      */
     }
+    //err = test_mwt_library_has_same_worm_pictures(a_library, W, bin, h1, h3, true); if (err != 0) return 230+err;
+    // These tests are too stringent--pixel-level differences are okay
+    // Reserve up to error code 239 here
+
     i = a_library.loadImage(h2,arena,0.4*j); if (i!=h2) return 41;
+    i = a_library.loadImage8(h4,arena8,0.4*j); if (i!=h4) return 141;
     i = a_library.showLoaded(h1,arena); if (i!=h1) return 42;
     i = a_library.showLoaded(h2,arena); if (i!=h2) return 43;
+    i = a_library.showLoaded8(h3,arena8); if (i!=h3) return 142;
+    i = a_library.showLoaded8(h4,arena8); if (i!=h4) return 143;
+    /*
+    for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
+      unsigned short u = arena.get(x,y);
+      unsigned short v = arena8.get(x,y);
+      if (!( (u==1 && v==1) || (u==(W-1) && v==255) || ((u >> 2)+2 > v && v+2 > (u >> 2)) )) {
+        printf("At %d, %d with binning %d: %d vs %d\n", x, y, bin, arena.get(x,y), arena8.get(x,y));
+        return 240;
+      }
+    }
+    */
     
     if (j==46)
     {
       i = a_library.markEvent(h2,1); if (i!=h2) return 44;
       i = a_library.markEvent(h1,2); if (i!=h1) return 45;
+      i = a_library.markEvent(h4,1); if (i!=h4) return 144;
+      i = a_library.markEvent(h3,2); if (i!=h3) return 145;
     }
     
     i = a_library.processImage(h1); if (i<2 || i>3) return 46;
     i = a_library.processImage(h2); if (i != 0) return 47;
+    i = a_library.processImage(h3); if (i<2 || i>3) return 146;
+    i = a_library.processImage(h4); if (i != 0) return 147;
     i = a_library.showResults(h1,arena); if (i!=h1) return 48;
     i = a_library.showResults(h2,arena); if (i!=h2) return 49;
+    i = a_library.showResults8(h3,arena8); if (i!=h3) return 148;
+    i = a_library.showResults8(h4,arena8); if (i!=h4) return 149;
+    //err = test_mwt_library_has_same_worm_pictures(a_library, W, bin, h1, h3, true); if (err != 0) return 250+err;
+    // Too stringent: pixel-level differences are okay
+    // Reserve up to error code 259 here
+
     arena.bin = 0;
+    arena8.bin = 0;
 
 #ifndef PERFORMANCE_TEST    
     if ( (j%2) == 0)

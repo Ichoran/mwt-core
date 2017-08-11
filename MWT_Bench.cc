@@ -27,17 +27,24 @@ void deltize(timeval &t) {
     if (t.tv_sec < 0) { t.tv_sec = 0; t.tv_usec = 0; }
 }
 
-std::vector<Image*> names_to_data(int argn, char *argv[]) {
+std::vector<Image*> names_to_data(int argn, char *argv[], int dep) {
     std::vector<Image*> images;
     images.reserve(argn-1);
     unsigned char *buffer = new unsigned char[512*512];
     for (int i = 1; i < argn; i++) {
         FILE *f = fopen(argv[i], "rb");
         Image *im = new Image(Point(512, 512), false);
+        im->depth = (dep < 1) ? 1 : ((dep > 14) ? 14: dep);
         auto n = fread((void*)buffer, 1, 512*512, f);
         unsigned char *b = buffer;
         short *c = im->pixels;
-        for (int j = 0; j < 512*512; j++) { *c = (short)(*b) * 4; b++; c++; }
+        if (im->depth > 8) {
+            short m = 1<<(im->depth - 8);
+            for (int j = 0; j < 512*512; j++) { *c = (short)(*b) * m; b++; c++; }
+        }
+        else {
+            for (int j = 0; j < 512*512; j++) { *c = (short)(*b); b++; c++; }
+        }
         if (n != 512*512) { printf("Wrong number of pixels: %ld in %s\n", n, argv[i]); exit(1); }
         fclose(f);
         images.push_back(im);
@@ -69,14 +76,17 @@ void yell(int i, int j, int e) {
     if (i != j) printf("%d!%d ", e, j);
 }
 
+#define EIGHT
+
 int main(int argn, char *argv[]) {
     timeval t0; gettimeofday(&t0, NULL);
 #ifdef EIGHT
     auto im = new Image8(Point(512, 512), false);
     auto images = names_to_data8(argn, argv);
 #else
+    int nbits = 8;
     auto im = new Image(Point(512, 512), false);
-    auto images = names_to_data(argn, argv);
+    auto images = names_to_data(argn, argv, nbits);
 #endif
     deltize(t0);
     printf("Read %d files in %ld.%03lds\n", argn-1, t0.tv_sec, t0.tv_usec/1000);
@@ -87,7 +97,7 @@ int main(int argn, char *argv[]) {
 #ifdef EIGHT
     hh = mwt.setImageInfo(h, 8, 512, 512); yell(h, hh, -2);
 #else
-    hh = mwt.setImageInfo(h, 10, 512, 512); yell(h, hh, -2);
+    hh = mwt.setImageInfo(h, nbits, 512, 512); yell(h, hh, -2);
 #endif
     set_the_date(mwt, h);
     hh = mwt.setOutput(h, "fake-data", "bench", true, false, false); yell(h, hh, -3);
@@ -97,7 +107,7 @@ int main(int argn, char *argv[]) {
 #ifdef EIGHT
     hh = mwt.setObjectIntensityThresholds(h, 240, 230); yell(h, hh, -6);
 #else
-    hh = mwt.setObjectIntensityThresholds(h, 980, 940); yell(h, hh, -6);
+    hh = mwt.setObjectIntensityThresholds(h, 960/4, 920/4); yell(h, hh, -6);
 #endif
     hh = mwt.setObjectSizeThresholds(h, 5, 10, 2000, 3000); yell(h, hh, -7);
     hh = mwt.setObjectPersistenceThreshold(h, 8); yell(h, hh, -8);

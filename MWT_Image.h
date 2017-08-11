@@ -505,6 +505,9 @@ public:
     im->bounds = bounds;
     return im;
   }
+
+  // Creates an identical copy of the image with its own memory etc but everything else the same
+  Image* identical() const;
   
   
   // Access to the underlying data
@@ -661,7 +664,7 @@ public:
   short bin;
   bool owns_pixels;
   
-  bool divide_bg; 
+  bool divide_bg;
 
   // Creating and disposing of images
   Image8() : pixels(NULL),bounds(),size(0,0),bin(0),owns_pixels(false),divide_bg(false) { }
@@ -709,6 +712,9 @@ public:
     im->bounds = bounds;
     return im;
   }
+
+  // Create an identical 16-bit-storage-depth image
+  Image* identical16() const;
   
   
   // Access to the underlying data

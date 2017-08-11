@@ -134,7 +134,7 @@ int FilenameComponent::safeLength(ManagedList<FilenameComponent>& fc)
       case empty: break;
       case text: i += fc.i().width; break;  // Easy--strings are as long as they are long.
       default:
-        int j = (int)floor(log10(fabs(fc.i().value))+1);  // Number of digits in a numeric field
+        int j = (int)floor(log10(fabs((double)fc.i().value))+1);  // Number of digits in a numeric field
         if (fc.i().value<0) j++;                          // Need room for a minus sign
         if (j < fc.i().width) j = fc.i().width;           // We asked for padding, so give room for it
         i += j;
@@ -1196,7 +1196,6 @@ int Performance::initialScan(Image *fg,double time)
     foreground = new Image(fg->getBounds(), fg->divide_bg);
     foreground->depth = fg->depth+1;
     (*foreground) = 1<<fg->depth;  // Must all be gray, since we're subtracting ourselves
-    
     return 0;
   }
   else
@@ -1220,8 +1219,8 @@ int Performance::initialScan(Image *fg,double time)
 }
 int Performance::initialScan8(Image8 *fg, double time)
 {
-  Image im(fg->getBounds(), false);
-  im.depth = (foreground != NULL) ? foreground->depth : ((background != NULL) ? background->depth : Image::DEFAULT_BIT_DEPTH);
+  Image im(fg->getBounds(), false);  // Expensive, but initialization only
+  im.depth = 8;
   im.copy8(*fg, true);
   return initialScan(&im, time);
 }
@@ -1269,7 +1268,7 @@ int Performance::initialRefs(Image* fg,ManagedList<Point>& locations,double time
 }
 int Performance::initialRefs8(Image8 *fg, ManagedList<Point>& locations, double time) {
   Image im(fg->getBounds(), false);
-  im.depth = (foreground != NULL) ? foreground->depth : ((background != NULL) ? background->depth : Image::DEFAULT_BIT_DEPTH);
+  im.depth = 8;
   im.copy8(*fg, true);
   return initialRefs(&im, locations, time);
 }
@@ -1421,7 +1420,6 @@ void Performance::loadNextSingleItem(Image* fg)
       break;
   }
 }
-  
 
 // Load the bit of image for one item in the next image
 void Performance::loadNextSingleItem8(Image8* fg)
