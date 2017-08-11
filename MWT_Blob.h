@@ -13,6 +13,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #include "MWT_Geometry.h"
 #include "MWT_Lists.h"
@@ -125,11 +126,13 @@ class PackedContour
 public:
   short x_start;
   short y_start;
-  int size;  // Length of contour including start point
+  volatile int size;  // Length of contour including start point
   unsigned char *bits;
   PackedContour() : x_start(0),y_start(0),size(0),bits(NULL) { }
   PackedContour(Contour& c);
-  ~PackedContour() { if (bits!=NULL) { delete[] bits; bits=NULL; } }
+  // Warning: something VERY sketchy is going on here; destructor gets called twice!
+  // `volatile int size` provides a workaround, but why is it called twice???
+  ~PackedContour() { if (bits != NULL && size>0) { delete[] bits; bits=NULL; size = 0; } }
   Contour* unpack(Contour* c);
   void printData(FILE* f,bool add_newline);
 };
@@ -178,6 +181,7 @@ public:
   void tossStats();
   Rectangle findNextROI(Image* bg,int border) const;
   void clip(const Blob& last,Image* fg,Image* bg,int border);
+  void clip8(const Blob& last, Image8* fg, Image* bg, int border);
   int find(Mask* old_mask,Mask* exclusion_mask);
   void adoptCandidate();
   void flush();
@@ -292,6 +296,7 @@ public:
   void setFirst(Image* im,FloodData *fd,int frame,double time);
   Blob* makeFirst(int frame,double time);
   void readyAnother(Image *fg,Image *bg,int frame,double time);
+  void readyAnother8(Image8 *fg, Image *bg, int frame, double time);
   bool findAnother(bool best_guess,Mask* exclusion_mask);
   void validate();
   void invalidate();
@@ -471,18 +476,23 @@ public:
   void setROI(const Rectangle& r);
   void setROI(const Ellipse& e);
   void setROI(Mask& m);
-  void setNotInROI(Image *im);
+  void setNotInROI(const Image *im);
   
   // Image scanning
   int scanImage(Image* im);  // Lower level, called by latter functions
   void adoptScan(Image* im); // Also lower level
   int initialScan(Image *fg,double time);
   int initialRefs(Image *fg,ManagedList<Point>& locations,double time);
+  // 8 bit versions
+  int initialScan8(Image8 *fg, double time);
+  int initialRefs8(Image8 *fg, ManagedList<Point>& locations, double time);
   
   int anticipateNext(double time);
   bool findNextItemBounds(Rectangle& im_bound);
   void loadNextSingleItem(Image* fg);
-  void readyNext(Image *fg,double time);
+  void loadNextSingleItem8(Image8* fg);
+  void readyNext(Image *fg, double time);
+  void readyNext8(Image8 *fg, double time);
   int findNext();
   
 	// Image correction 
@@ -494,7 +504,9 @@ public:
   bool logErrors(char* err_fname);
   bool finishOutput();
   void imprint(Image* im,short borderI,int borderW,short maskI,int maskW,short dancerI,bool show_dancer,
-               short sitterI,bool show_sitter,short dcenterI,int dcenterR);
+    short sitterI,bool show_sitter,short dcenterI,int dcenterR);
+  void imprint8(Image8* im, uint8_t borderI, int borderW, uint8_t maskI, int maskW, uint8_t dancerI, bool show_dancer,
+    uint8_t sitterI, bool show_sitter, uint8_t dcenterI, int dcenterR);
 };
 
 

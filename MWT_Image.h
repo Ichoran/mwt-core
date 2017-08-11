@@ -10,6 +10,7 @@
 #define MWT_IMAGE
 
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -433,6 +434,9 @@ public:
 ** HOWTO */
  
 // Holds image data (as shorts), optionally with binning
+
+class Image8; // Forward declaration of 8-bit images (needed so we can use them)
+
 class Image
 {
 public:
@@ -501,6 +505,9 @@ public:
     im->bounds = bounds;
     return im;
   }
+
+  // Creates an identical copy of the image with its own memory etc but everything else the same
+  Image* identical() const;
   
   
   // Access to the underlying data
@@ -596,6 +603,19 @@ public:
   void diffCopy(const Image& source,Mask& m,const Image& bg);
   void diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,int rate);  // Same as diffCopy (but bg gets adapted)
   void diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate);
+
+  // Same as above but using 8 bit images as a source
+  void mimic8(const Image8& source , Rectangle my_region , Rectangle source_region , ScaleType method = Subsample);
+  void mimic8(const Image8& source , ScaleType method = Subsample );
+  void copy8(Point where,const Image8& source,Point size,bool fix_depth=false);
+  void copy8(const Image8& source,Mask& m,bool fix_depth=false);
+  void copy8(const Image8& source,bool fix_depth=false);
+  void adapt8(Point where,const Image8& im,Point size,int rate); // Adapting image has deeper bit depth
+  void adapt8(const Image8& im,Mask &m,int rate);
+  void diffCopy8(Point where,const Image8& source,Point size,const Image& bg);  // Diffcopied image is effectively one bit deeper than source, bg is much deeper
+  void diffCopy8(const Image8& source,Mask& m,const Image& bg);
+  void diffAdaptCopy8(Point where,const Image8& source,Point size,Image& bg,int rate);  // Same as diffCopy (but bg gets adapted)
+  void diffAdaptCopy8(const Image8& source,Mask& m,Image& bg,int rate);
   
   // Flood fills--note that resulting strips are unsorted
   void floodLine(FloodInfo& info,FloodData* data,Stackable<Strip>*& head,Stackable<Strip>*& tail);
@@ -610,9 +630,182 @@ public:
   int writeTiff(FILE *f);
   int writeTiff(const char *fname);
   void println() const;
+};
 
-  // General image utilities
-  static void copy8to16(const unsigned char *in, int inStride, unsigned short *out, int outStride, int nx, int ny);
+
+/****************************************************************
+                      An Eight-Bit Image
+****************************************************************/
+
+
+/* HOWTO **
+**** How Image8 deals with memory ****
+  Image8 can have either one or two arrays of pixels; these are arrays of
+  bytes either allocated with new (reclaim with delete[]), or allocated
+  elsewhere.  If one image is assigned to another, the one on the left will
+  inherit the memory.  If an image is managing its own memory, it will
+  delete[] the array(s) when the destructor is called.
+
+  Unlike an Image16, all images must have a bit depth of exactly 8
+** HOWTO */
+ 
+// Holds image data (as bytes), optionally with binning
+class Image8
+{
+public:
+  
+  enum ScaleType { Subsample , LinearFit };
+  
+  uint8_t *pixels;
+  
+  Rectangle bounds;
+  Point size;
+  
+  short bin;
+  bool owns_pixels;
+  
+  bool divide_bg;
+
+  // Creating and disposing of images
+  Image8() : pixels(NULL),bounds(),size(0,0),bin(0),owns_pixels(false),divide_bg(false) { }
+  Image8(uint8_t *raw_image,Point image_size, bool algo)
+    : pixels(raw_image),bounds(Point(0,0),image_size-1),size(image_size),
+      bin(0),owns_pixels(false),divide_bg(algo) { }
+  Image8(Point image_size, bool algo) : size(image_size),bin(0),owns_pixels(true),divide_bg(algo)
+  {
+    if (size.x<1) size.x=1;
+    if (size.y<1) size.y=1;
+    bounds = Rectangle(Point(0,0),size-1);
+    pixels = new uint8_t[ bounds.area() ];
+  }
+  Image8(Rectangle image_bounds, bool algo) : bounds(image_bounds),bin(0),owns_pixels(true),divide_bg(algo)
+  {
+    if (bounds.near.x > bounds.far.x) bounds.far.x = bounds.near.x;
+    if (bounds.near.y > bounds.far.y) bounds.far.y = bounds.near.y;
+    size = bounds.size();
+    pixels = new uint8_t[ bounds.area() ];
+  }
+  Image8(const Image8& existing,const Rectangle &region, bool algo);
+  ~Image8()
+  {
+    if (owns_pixels && pixels!=NULL) { delete[] pixels; pixels=NULL; }
+    owns_pixels = false;
+  }
+  
+  // Stuff for binned images
+  Rectangle getBounds() const { if (bin<=1) return bounds; else return Rectangle( (bounds.near+(bin-1))/bin , (bounds.far-(bin-1))/bin ); }
+  int getWidth() const { if (bin<=1) return bounds.width(); else return 1 + (bounds.far.x-(bin-1))/bin - (bounds.near.x+(bin-1))/bin; }
+  int getHeight() const { if (bin<=1) return bounds.height(); else return 1 + (bounds.far.y-(bin-1))/bin - (bounds.near.y+(bin-1))/bin; }
+  
+  // Assigning images--pixels are assigned by reference, use clone() to duplicate, copy to transfer pixels
+  Image8& operator=(Image8 &im) {
+    pixels = im.pixels;
+    bounds = im.bounds;
+    size = im.size;
+    bin = im.bin;
+    owns_pixels = im.owns_pixels;
+    im.owns_pixels = false;
+    return *this;
+  }
+  Image8* clone() {
+    Image8* im = new Image8(*this,getBounds(),divide_bg);
+    im->bounds = bounds;
+    return im;
+  }
+
+  // Create an identical 16-bit-storage-depth image
+  Image* identical16() const;
+  
+  
+  // Access to the underlying data
+  inline uint8_t& raw(int x,int y) { return pixels[y+size.y*x]; }
+  inline uint8_t& raw(Point p) { return pixels[p.y+size.y*p.x]; }
+  inline uint8_t peek(int x,int y) const { return pixels[y+size.y*x]; }
+  inline uint8_t peek(Point p) const { return pixels[p.y+size.y*p.x]; }
+  // Access to the underlying data with offset
+  inline uint8_t& rare(int x,int y) { return pixels[(y-bounds.near.y) + size.y*(x-bounds.near.x)]; }
+  inline uint8_t& rare(Point p) { return pixels[(p.y-bounds.near.y) + size.y*(p.x-bounds.near.x)]; }
+  inline uint8_t view(int x,int y) const { return pixels[(y-bounds.near.y) + size.y*(x-bounds.near.x)]; }
+  inline uint8_t view(Point p) const { return peek(p-bounds.near); }
+  // "Vector" access to underlying data (packed in ints)
+  inline unsigned short& rareS(int x,int y) { return *((unsigned short*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  inline unsigned short viewS(int x,int y) const { return *((unsigned short*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  // Access to data in global coordinates, with binning as needed
+  inline uint8_t get(int x,int y) const {
+    if (bin<=1) return peek(x-bounds.near.x,y-bounds.near.y);
+    else {
+      int I=0;
+      x = bin*x-bounds.near.x;
+      y = bin*y-bounds.near.y;
+      for (int i=0;i<bin;i++) for (int j=0;j<bin;j++) I += peek(x+i,y+j);
+      return I/(bin*bin);
+    }
+  }
+  inline uint8_t get(Point p) const {
+    if (bin<=1) return peek(p-bounds.near);
+    else {
+      int I=0;
+      Point q;
+      p *= bin;
+      p -= bounds.near;
+      for (q.x=0;q.x<bin;q.x++) for (q.y=0;q.y<bin;q.y++) I += peek(p+q);
+      return I/(bin*bin);
+    }
+  }
+  void set(int x,int y,uint8_t I) {
+    if (bin <= 1) raw(x-bounds.near.x,y-bounds.near.y) = I;
+    else {
+      x = bin*x-bounds.near.x;
+      y = bin*y-bounds.near.y;
+      for (int i=0;i<bin;i++) for (int j=0;j<bin;j++) raw(x+i,y+j) = I;
+    }
+  }
+  void set(Point p,uint8_t I) {
+    if (bin <= 1) raw(p-bounds.near) = I;
+    else {
+      Point q;
+      p *= bin;
+      p -= bounds.near;
+      for (q.x=0;q.x<bin;q.x++) for (q.y=0;q.y<bin;q.y++) raw(p+q) = I;
+    }
+  }
+  void set(Rectangle r, uint8_t I);
+  void set(Mask &m, uint8_t I);
+  void set(Contour& c, uint8_t I) {
+    Point p;
+    Rectangle b = getBounds();
+    c.start();
+    while (c.advance()) { if (b.contains(c.i())) set( c.i() , I ); }
+  }
+  void set(Point p1, Point p2, int width, uint8_t I); // Sets a line of specified radius (0=single pixel) from p1 up to but not including p2
+  void set(Contour &c, int width, uint8_t I);         // Draws a contour as lines--if contour is not made of adjacent pixels, it's still connected
+  
+  // Operations to shift and scale image by a constant
+  inline Image8& operator=(uint8_t I) { for (int i=0;i<size.x*size.y;i++) pixels[i]=I; return *this; }
+  inline Image8& operator+=(uint8_t I) { for (int i=0;i<size.x*size.y;i++) pixels[i]+=I; return *this; }
+  inline Image8& operator+=(Point p) { bounds += p; return *this; }
+  inline Image8& operator-=(uint8_t I) { for (int i=0;i<size.x*size.y;i++) pixels[i]-=I; return *this; }
+  inline Image8& operator-=(Point p) { bounds -= p; return *this; }
+  
+  // Copy bits of one image to another in various ways
+  void mimic(const Image8& source , Rectangle my_region , Rectangle source_region , ScaleType method = Subsample);
+  void mimic(const Image8& source , ScaleType method = Subsample ) { mimic(source,getBounds(),source.getBounds(),method); }
+  void copy(Point where,const Image8& source,Point size);
+  void copy(const Image8& source,Mask& m);
+  void copy(const Image8& source) { copy( source.bounds.near , source , source.size ); }
+  
+  // Similar, except use 16 bit image as a source
+  void mimic16(const Image& source , Rectangle my_region , Rectangle source_region , ScaleType method = Subsample);
+  void mimic16(const Image& source , ScaleType method = Subsample ) { mimic16(source,getBounds(),source.getBounds(),method); }
+  void copy16(Point where,const Image& source,Point size,bool fix_depth=false);
+  void copy16(const Image& source,Mask& m,bool fix_depth=false);
+  void copy16(const Image& source,bool fix_depth=false) { copy16( source.bounds.near , source , source.size , fix_depth ); }
+  
+  // Output and testing
+  int makeTiffHeader(unsigned char *buffer);
+  int writeTiff(FILE *f);
+  int writeTiff(const char *fname);
+  void println() const;
 };
 
 
@@ -625,6 +818,7 @@ int test_mwt_image_strip();
 int test_mwt_image_mask();
 int test_mwt_image_contour();
 int test_mwt_image_image();
+int test_mwt_image_image8();
 int test_mwt_image();
 
 #endif

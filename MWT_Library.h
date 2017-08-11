@@ -214,11 +214,17 @@ public:
   int cutRectangle(int handle,int left,int right,int top,int bottom);
   int cutEllipse(int handle,int centerx,int centery,int radiusx,int radiusy);
   int showROI(int handle,Image& im);
+  // 8-bit image version
+  int showROI8(int handle,Image8& im);
   
   // Utility image processing functions
   int resizeRescale(int handle,Image& source,Image& dest,Rectangle dest_selection);
   int resizeRescaleMemory(int handle,Image& dest,Rectangle dest_selection);
   int resizeRescaleFixed(int handle,Image& dest,Rectangle dest_selection);
+  // 8-bit image versions
+  int resizeRescale8(int handle,Image8& source,Image8& dest,Rectangle dest_selection);
+  int resizeRescaleMemory8(int handle,Image8& dest,Rectangle dest_selection);
+  int resizeRescaleFixed8(int handle,Image8& dest,Rectangle dest_selection);
   
   // Preparing and getting feedback on reference objects
   int setRefIntensityThreshold(int handle,int intensity_low,int intensity_high);
@@ -226,6 +232,9 @@ public:
   int removeLastReferenceObject(int handle);
   int scanRefs(int handle,Image& im);
   int showRefs(int handle,Image& im,bool show_as_white=true);
+  // 8-bit image versions
+  int scanRefs8(int handle,Image8& im);
+  int showRefs8(int handle,Image8& im,bool show_as_white=true);
   
   // Preparing and getting feedback on moving objects
   int setObjectIntensityThresholds(int handle,int intensity_to_fill,int intensity_of_new);
@@ -234,6 +243,9 @@ public:
   int setAdaptationRate(int handle,int alpha);
   int scanObjects(int handle,Image& im);
   int showObjects(int handle,Image& im);
+  // 8-bit image versions
+  int scanObjects8(int handle,Image8& im);
+  int showObjects8(int handle,Image8& im);
   
   // Controls for what statistical data to collect
   int setVelocityIntegrationTime(int handle,float interval);
@@ -252,6 +264,12 @@ public:
   int showResults(int handle,Image& im);
   int checkErrors(int handle);
   int complete(int handle);  // Must call this to save summary information!
+  // 8-bit image versions
+  int loadThisImagePiece8(int handle,Image8& im); 
+  int loadImage8(int handle,Image8& im,float time);  // Prepares, gets, and loads all pieces at once
+  int loadImageAsPieces8(int handle,Image8& im,float time);  // Inefficient version of loadImage with an extra copy of image pieces (useful for testing)
+  int showLoaded8(int handle,Image8& im);
+  int showResults8(int handle,Image8& im);
   
   // Image correction algorithm
   int setDivisionImageCorrectionAlgorithm( int handle );

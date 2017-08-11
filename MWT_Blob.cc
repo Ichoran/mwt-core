@@ -134,7 +134,7 @@ int FilenameComponent::safeLength(ManagedList<FilenameComponent>& fc)
       case empty: break;
       case text: i += fc.i().width; break;  // Easy--strings are as long as they are long.
       default:
-        int j = (int)floor(log10(fabs(fc.i().value))+1);  // Number of digits in a numeric field
+        int j = (int)floor(log10(fabs((double)fc.i().value))+1);  // Number of digits in a numeric field
         if (fc.i().value<0) j++;                          // Need room for a minus sign
         if (j < fc.i().width) j = fc.i().width;           // We asked for padding, so give room for it
         i += j;
@@ -198,7 +198,8 @@ PackedContour::PackedContour(Contour& c) : x_start(0),y_start(0),size(0),bits(NU
   }
   else return;
   
-  bits = new unsigned char[ (size+3)/4 + 1 ];
+  int n = (size+3)/4 + 1;
+  bits = new unsigned char[n];
   unsigned int accumulator = 0;
   int cycle_index = 0;
   int bits_index = 0;
@@ -217,7 +218,7 @@ PackedContour::PackedContour(Contour& c) : x_start(0),y_start(0),size(0),bits(NU
       cycle_index++;
       if (cycle_index>=4)
       {
-        if (bits_index>=(size+3)/4)
+        if (bits_index >= n-1)
         {
           printf("Yikes!\n");
         }
@@ -234,11 +235,16 @@ PackedContour::PackedContour(Contour& c) : x_start(0),y_start(0),size(0),bits(NU
     cycle_index++;
     if (cycle_index>=4)
     {
+      if (bits_index >= n-1)
+      {
+        printf("Yikes!\n");
+      }
       bits[bits_index++] = (unsigned char)accumulator;
       accumulator = 0;
       cycle_index = 0;
     }
   }
+  while (bits_index < n) bits[bits_index++] = 0;
 }
 
 // Converts a packed contour into a regular one
@@ -390,6 +396,27 @@ void Blob::clip(const Blob& last,Image* fg,Image* bg,int border)
     im->diffCopy(r.near,*fg,r.size(),*bg);
   }
   else im = new Image(*fg , r, fg->divide_bg);
+}
+
+
+// Clip out an expected blob given the last known location and a foreground image
+// Background image is optional; can be subtracted.
+void Blob::clip8(const Blob& last, Image8* fg, Image* bg, int border)
+{
+  if (im!=NULL) { delete im; im=NULL; }
+  Rectangle r = last.findNextROI(bg,border);
+  r *= fg->getBounds();
+  if (r.area()<1) {
+    return;
+  }
+  
+  im = new Image(r, fg->divide_bg);
+  if (bg)
+  {
+    im->depth = 9;
+    im->diffCopy8(r.near, *fg, r.size(), *bg);
+  }
+  else im->copy8(r.near, *fg, r.size());
 }
 
 
@@ -692,6 +719,22 @@ void Dancer::readyAnother(Image* fg,Image* bg,int frame,double time)
   movie.t().dancer = this;
   movie.t().clip( old_blob , fg , bg , border );
 	
+  frames.hi() = frame;
+  times.hi() = time;
+  validated = false;
+}
+
+
+// Get ready to look for a new blob
+void Dancer::readyAnother8(Image8* fg, Image* bg, int frame, double time)
+{
+  Blob& old_blob = movie.t();
+  
+  new( movie.Append() ) Blob(frame,time);
+  
+  movie.t().dancer = this;
+  movie.t().clip8( old_blob , fg , bg , border );
+  
   frames.hi() = frame;
   times.hi() = time;
   validated = false;
@@ -1054,7 +1097,7 @@ void Performance::setROI(Mask &m)
 }
 
 // Call this to set up a mask that detects when you're within the image but running too close to the edge of the ROI
-void Performance::setNotInROI(Image *im)
+void Performance::setNotInROI(const Image *im)
 {
   if (im==NULL) return;
   if (danger_zone==NULL || !danger_zone->bounds.contains( im->getBounds() ))
@@ -1153,7 +1196,6 @@ int Performance::initialScan(Image *fg,double time)
     foreground = new Image(fg->getBounds(), fg->divide_bg);
     foreground->depth = fg->depth+1;
     (*foreground) = 1<<fg->depth;  // Must all be gray, since we're subtracting ourselves
-    
     return 0;
   }
   else
@@ -1174,6 +1216,13 @@ int Performance::initialScan(Image *fg,double time)
     adoptScan(foreground);
     return n;
   }
+}
+int Performance::initialScan8(Image8 *fg, double time)
+{
+  Image im(fg->getBounds(), false);  // Expensive, but initialization only
+  im.depth = 8;
+  im.copy8(*fg, true);
+  return initialScan(&im, time);
 }
 
 
@@ -1217,6 +1266,13 @@ int Performance::initialRefs(Image* fg,ManagedList<Point>& locations,double time
   
   return sitters.size;
 }
+int Performance::initialRefs8(Image8 *fg, ManagedList<Point>& locations, double time) {
+  Image im(fg->getBounds(), false);
+  im.depth = 8;
+  im.copy8(*fg, true);
+  return initialRefs(&im, locations, time);
+}
+
 
 
 // Get ready to load in data from the next image (return how many items there will be)
@@ -1364,10 +1420,44 @@ void Performance::loadNextSingleItem(Image* fg)
       break;
   }
 }
+
+// Load the bit of image for one item in the next image
+void Performance::loadNextSingleItem8(Image8* fg)
+{
+  switch (load_state)
+  {
+    case no_state:
+      break;
+    case check_sitter:
+      break;
+    case check_dancer:
+      break;
+    case check_band:
+      break;
+    case load_sitter:
+      sitters.i().readyAnother8(fg, NULL, current_frame, current_time);
+      load_state = check_sitter;
+      break;
+    case load_dancer: 
+      dancers.i().readyAnother8(fg, background, current_frame, current_time);
+      load_state = check_dancer;
+      break;
+    case load_band:
+      // We already prepared the image when we checked it, so we just need to load it
+      band->depth = 9;
+      *band = 256;  // Initialize to gray
+      band->diffAdaptCopy8(*fg, *band_area, *background, adapt_rate);
+      load_state = all_loaded;
+      break;
+    case all_loaded:
+    default:
+      break;
+  }
+}
   
 
 // Load data into appropriate images--use the one-item-at-a-time routines above
-void Performance::readyNext(Image* fg,double time)
+void Performance::readyNext(Image* fg, double time)
 {
   anticipateNext(time);
   
@@ -1375,6 +1465,19 @@ void Performance::readyNext(Image* fg,double time)
   while (findNextItemBounds(single_bound))
   {
     loadNextSingleItem(fg);
+  }
+}
+
+
+// Load data into appropriate images--use the one-item-at-a-time routines above
+void Performance::readyNext8(Image8* fg, double time)
+{
+  anticipateNext(time);
+  
+  Rectangle single_bound;
+  while (findNextItemBounds(single_bound))
+  {
+    loadNextSingleItem8(fg);
   }
 }
 
@@ -1401,6 +1504,7 @@ int Performance::findNext()
   dancers.start();
   while (dancers.advance())
   {
+    //printf("I found a dancer!  %d spans %d - %d\n", dancers.i().ID, dancers.i().frames.lo(), dancers.i().frames.hi());
     found = dancers.i().findAnother(false,danger_zone);
     if (!found)
     {
@@ -1410,7 +1514,7 @@ int Performance::findNext()
         {
           fates.Append( BlobOriginFate(current_frame,dancers.i().ID,0) );
         }
-        dancers.i().invalidate();       
+        dancers.i().invalidate();  
         dancers.Backspace();
 
       }
@@ -1716,82 +1820,120 @@ bool Performance::finishOutput()
 
 
 // Write some visual cues on an image that shows the current stuff being tracked
-void Performance::imprint(Image* im,short borderI,int borderW,short maskI,int maskW,short dancerI,bool show_dancer,
-                          short sitterI,bool show_sitter,short dcenterI,int dcenterR)
+void Performance::imprint(
+  Image* im, short borderI, int borderW, short maskI, int maskW, short dancerI, bool show_dancer,
+  short sitterI, bool show_sitter, short dcenterI, int dcenterR)
 {
-  if (borderW > 0 && background!=NULL)
-  {
+  // WARNING--you need to MANUALLY keep this in sync with the 8 bit version!
+  if (borderW > 0 && background!=NULL) {
     Rectangle r,R;
     R = background->getBounds();
-    r = R;
-    r.far.y = R.near.y;
-    r.expand(borderW-1);
-    im->set(r,borderI);
-    r = R;
-    r.far.x = R.near.x;
-    r.expand(borderW-1);
-    im->set(r,borderI);
-    r = R;
-    r.near.y = R.far.y;
-    r.expand(borderW-1);
-    im->set(r,borderI);
-    r = R;
-    r.near.x = R.far.x;
-    r.expand(borderW-1);
-    im->set(r,borderI);
+    r = R; r.far.y = R.near.y; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.far.x = R.near.x; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.near.y = R.far.y; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.near.x = R.far.x; r.expand(borderW-1); im->set(r,borderI);
   }
-  if (maskW > 0 && full_area!=NULL)
-  {
+  if (maskW > 0 && full_area!=NULL) {
     Mask edgemask( *full_area , ManagedList<Strip>::SubordinateList );
     full_area->extractEdge(edgemask);
     edgemask.dilate(maskW);
     im->set(edgemask,maskI);
   }
-  if (show_dancer)
-  {
-    Point p;
-    Strip s;
+  if (show_dancer) {
     Mask* m;
     dancers.start();
-    while (dancers.advance())
-    {
+    while (dancers.advance()) {
       m = &dancers.i().movie.t().mask();
       im->set(*m,dancerI);
     }
   }
-  if (show_sitter)
-  {
-    Point p;
-    Strip s;
+  if (show_sitter) {
     Mask* m;
     sitters.start();
-    while (sitters.advance())
-    {     
+    while (sitters.advance()) {     
       m = &sitters.i().movie.t().mask();
       im->set(*m,sitterI);
     }
   }
-  if (dcenterR>0)
-  {
+  if (dcenterR > 0) {
     Point p;
     Rectangle r;
     dancers.start();
-    while (dancers.advance())
-    {
+    while (dancers.advance()) {
       p = dancers.i().movie.t().data().centroid.toPoint();
       r.near = p - (dcenterR-1);
       r.far = p + (dcenterR-1);
       im->set(r,dcenterI);
       
-      if (dancers.i().find_skel && dancers.i().movie.t().skeleton != NULL)
-      {
+      if (dancers.i().find_skel && dancers.i().movie.t().skeleton != NULL) {
         Contour& c = dancers.i().movie.t().spine();
         r = im->getBounds();
         c.start();
         while (c.advance()) { if (r.contains( p + c.i() )) im->set(p+c.i() , dcenterI); }
       }
-      if (dancers.i().find_outline && dancers.i().movie.t().outline != NULL)
-      {
+      if (dancers.i().find_outline && dancers.i().movie.t().outline != NULL) {
+        Contour& c = dancers.i().movie.t().edge();
+        r = im->getBounds();
+        c.start();
+        while (c.advance()) { if (r.contains( c.i() )) im->set(c.i(),dcenterI); }
+      }
+    }
+  }
+}
+
+// Write some visual cues on an image that shows the current stuff being tracked
+void Performance::imprint8(
+  Image8* im, uint8_t borderI, int borderW, uint8_t maskI, int maskW, uint8_t dancerI, bool show_dancer,
+  uint8_t sitterI, bool show_sitter, uint8_t dcenterI, int dcenterR)
+{
+  // WARNING--you need to MANUALLY keep this in sync with the 16 bit version!
+  if (borderW > 0 && background!=NULL) {
+    Rectangle r,R;
+    R = background->getBounds();
+    r = R; r.far.y = R.near.y; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.far.x = R.near.x; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.near.y = R.far.y; r.expand(borderW-1); im->set(r,borderI);
+    r = R; r.near.x = R.far.x; r.expand(borderW-1); im->set(r,borderI);
+  }
+  if (maskW > 0 && full_area!=NULL) {
+    Mask edgemask( *full_area , ManagedList<Strip>::SubordinateList );
+    full_area->extractEdge(edgemask);
+    edgemask.dilate(maskW);
+    im->set(edgemask, maskI);
+  }
+  if (show_dancer) {
+    Mask* m;
+    dancers.start();
+    while (dancers.advance()) {
+      m = &dancers.i().movie.t().mask();
+      im->set(*m, dancerI);
+    }
+  }
+  if (show_sitter) {
+    Mask* m;
+    sitters.start();
+    while (sitters.advance()) {     
+      m = &sitters.i().movie.t().mask();
+      im->set(*m, sitterI);
+    }
+  }
+  if (dcenterR > 0) {
+    Point p;
+    Rectangle r;
+    dancers.start();
+    while (dancers.advance()) {
+      p = dancers.i().movie.t().data().centroid.toPoint();
+      r.near = p - (dcenterR-1);
+      r.far = p + (dcenterR-1);
+      im->set(r,dcenterI);
+      
+      if (dancers.i().find_skel && dancers.i().movie.t().skeleton != NULL) {
+        Contour& c = dancers.i().movie.t().spine();
+        r = im->getBounds();
+        c.start();
+        while (c.advance()) { if (r.contains( p + c.i() )) im->set(p+c.i() , dcenterI); }
+      }
+      if (dancers.i().find_outline && dancers.i().movie.t().outline != NULL) {
         Contour& c = dancers.i().movie.t().edge();
         r = im->getBounds();
         c.start();
@@ -2047,13 +2189,34 @@ int test_mwt_blob_performance()
   }
   if (bad) return 9;
   
-  p->imprint(&im , 0 , 3 , W-1 , 2 , W-1 , true , 0 , true , 0 , 2);
+  Image km(im.getBounds(), false);
+  km.depth = 8;
+  km.copy(im, true);
+  Image8 jm(im.getBounds(), false);
+  jm.copy16(km);
+  for (int x = 0; x < im.size.x; x++) for (int y = 0; y < im.size.y; y++) if (jm.raw(x,y) != km.raw(x,y)) {
+    printf("Copied: at %d %d we find %d != %d (originally %d)\n", x, y, jm.raw(x,y), km.raw(x,y), im.raw(x,y));
+    return 10;
+  }
+
+  p->imprint( &im, 0, 3, W-1, 2, W-1, true, 0, true, 0, 2);
+
+  p->imprint8(&jm, 0, 3, 255, 2, 255, true, 0, true, 0, 2);
+  p->imprint( &km, 0, 3, 255, 2, 255, true, 0, true, 0, 2);
+  for (int x = 0; x < im.size.x; x++) for (int y = 0; y < im.size.y; y++) if (jm.raw(x,y) != km.raw(x,y)) {
+    printf("Imprinted: at %d %d we find %d != %d\n", x, y, jm.raw(x,y), km.raw(x,y));
+    return 11;
+  }
+
   im <<= 16-im.depth;
   i = im.writeTiff("performance_imprint.tiff");
-  if (i!=0) return 10;
+  if (i!=0) return 12;
+
+  i = jm.writeTiff("performance_imprint8.tiff");
+  if (i != 0) return 13;
   
   good = p->finishOutput();
-  if (!good) return 11;
+  if (!good) return 14;
   
   if (p->errors.size!=0)
   {
@@ -2062,7 +2225,7 @@ int test_mwt_blob_performance()
     {
       printf("Error: #%d says %s\n",p->errors.i().ID,p->errors.i().what);
     }
-    return 12;
+    return 15;
   }
   
   return 0;
