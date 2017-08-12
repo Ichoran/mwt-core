@@ -224,7 +224,7 @@ int TrackerLibrary::setAllDatesToMine(int handle)
 }
 
 // Set filename stuff, plus say what we want to output
-int TrackerLibrary::setOutput(int handle,const char *path,const char *prefix,bool save_obj,bool save_ref,bool save_im)
+int TrackerLibrary::setOutput(int handle,const char *path,const char *prefix,bool save_obj,bool save_ref,bool save_im,bool use_wcon)
 {
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
@@ -235,6 +235,7 @@ int TrackerLibrary::setOutput(int handle,const char *path,const char *prefix,boo
   te->save_objects = ( save_obj == 1 ) ? true : false;
   te->save_refs = ( save_ref == 1 ) ? true : false;
   te->save_images = (save_im == 1 ) ? true : false;
+  te->use_wcon = (use_wcon == 1) ? true : false;
   te->output_info_known = true;
   
   return handle;  

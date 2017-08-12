@@ -93,6 +93,7 @@ public:
   bool save_objects;
   bool save_refs;
   bool save_images;
+  bool use_wcon;
   struct tm *output_date;
   int image_bits;  // Will need to use this when wrapping images from LabView--they don't say how many bits the camera has!
   int image_width;
@@ -190,11 +191,11 @@ public:
   int setDate(int handle,int year,int month,int day,int hour,int minute,int second);
   int borrowDate(int handle,int donor_handle);
   int setAllDatesToMine(int handle);
-  int setOutput(int handle,const char *path,const char *prefix,bool save_obj,bool save_ref,bool save_im);
+  int setOutput(int handle,const char *path,const char *prefix,bool save_obj,bool save_ref,bool save_im,bool use_wcon);
   int beginOutput(int handle);
-  int setAndBeginOutput(int handle,const char *path,const char *prefix,bool save_obj,bool save_ref,bool save_im)
+  int setAndBeginOutput(int handle,const char *path,const char *prefix,bool save_obj,bool save_ref,bool save_im,bool use_wcon)
   {
-    int i = setOutput(handle,path,prefix,save_obj,save_ref,save_im);
+    int i = setOutput(handle,path,prefix,save_obj,save_ref,save_im,use_wcon);
     if (i==0) return beginOutput(handle);
     else return i;
   }

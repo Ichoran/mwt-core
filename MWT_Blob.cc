@@ -37,11 +37,11 @@ void FilenameComponent::showNumber(int val,int wid)
 {
   value = val;
   width = wid;
-  if (width<1) width=1;
-  else if (width>MAX_WIDTH) width=MAX_WIDTH;
+  if (width>MAX_WIDTH) width=MAX_WIDTH;
   if (format!=NULL) delete[] format;
   format = new char[8];
-  sprintf(format,"%%0%dd",width);
+  if (width < 1) sprintf(format,"%%d");
+  else sprintf(format,"%%0%dd",width);
 }
 
 void FilenameComponent::showNameDate(const char *trackerName, struct tm& date)
@@ -1688,7 +1688,7 @@ void Performance::enableOutput(Dancer& d,bool sitting)
 
 
 // Create output strings and paths for this performance
-bool Performance::prepareOutput(const char *trackerName, const char *path,const char *prefix,bool save_dance,bool save_sit,bool save_img,struct tm* date_to_use)
+bool Performance::prepareOutput(const char *trackerName, const char *path,const char *prefix,bool save_dance,bool save_sit,bool save_img,bool save_wcon,struct tm* date_to_use)
 {
   FilenameComponent* fc;
   if (path==NULL) path = ".";
@@ -1742,7 +1742,7 @@ bool Performance::prepareOutput(const char *trackerName, const char *path,const 
   prefix_name[prefixlen] = 0;
   
   // Generate filename patterns for dancers, sitters, and images
-  if (save_dance)
+  if (save_dance && !save_wcon)
   {
     if( combine_blobs ) 
 		{
@@ -1774,7 +1774,7 @@ bool Performance::prepareOutput(const char *trackerName, const char *path,const 
       fc = new( dance_fname->Append() ) FilenameComponent(); fc->showText(".blob");
       FilenameComponent::compact(*dance_fname);
   }
-  if (save_sit)
+  if (save_sit && !save_wcon)
   {
     sit_fname = new ManagedList<FilenameComponent>(12,true);
     fc = new( sit_fname->Append() ) FilenameComponent(); fc->showText(base_directory);
@@ -1789,7 +1789,7 @@ bool Performance::prepareOutput(const char *trackerName, const char *path,const 
     fc = new( sit_fname->Append() ) FilenameComponent(); fc->showText(".ref");
     FilenameComponent::compact(*sit_fname);
   }
-  if (save_img)
+  if (save_img && !save_wcon)
   {
     img_fname = new ManagedList<FilenameComponent>(12,true);
     fc = new( img_fname->Append() ) FilenameComponent(); fc->showText(base_directory);
@@ -1806,6 +1806,15 @@ bool Performance::prepareOutput(const char *trackerName, const char *path,const 
     fc = new( img_fname->Append() ) FilenameComponent(); fc->showText(".tif");
     FilenameComponent::compact(*img_fname);
   }
+  if (save_wcon && (save_dance || save_sit)) {
+    wcon_fname = new ManagedList<FilenameComponent(12, true);
+    fc = new( wcon_fname->Append() ) FilenameComponent(); fc->showText(base_directory);
+    fc = new( wcon_fname->Append() ) FilenameComponent(); fc->showText(prefix);
+    fc = new( wcon_fname->Append() ) FilenameComponent(); fc->showText("_");
+    fc = new( wcon_fname->Append() ) FilenameComponent(); fc->showChunk(0);
+    fc = new( wcon_fname->Append() ) FilenameComponent(); fc->showText(".wcon");
+    FilenameComponent::compact(*wcon_fname);
+  }
   return true;
 }
 
@@ -1815,7 +1824,14 @@ bool Performance::finishOutput()
 {
   sitters.flush();
   dancers.flush();
-  return true;
+  if (wcon_fname != NULL) return writePendingWcon(true);
+  else return true;
+}
+
+
+bool Performance::writePendingWcon()
+{
+
 }
 
 

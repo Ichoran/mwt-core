@@ -82,7 +82,7 @@ class FilenameComponent
 {
 public:
   static const int MAX_WIDTH = 16; // Must be at least the number of digits used by a signed integer (i.e. 11, for negative two billion)
-  enum Identity { empty , frame_n , dancer_n , perf_n , text };
+  enum Identity { empty , frame_n , dancer_n , perf_n , chunk_n, text };
   Identity identity;
   int value;
   int width;
@@ -94,6 +94,7 @@ public:
   void showFrame(int val,int wid) { identity=frame_n; showNumber(val,wid); }
   void showDancer(int val,int wid) { identity=dancer_n; showNumber(val,wid); }
   void showPerf(int val,int wid) { identity=perf_n; showNumber(val,wid); }
+  void showChunk(int val) { identity=chunk_n; showNumber(val, 0); }
   void showNameDate(const char* trackerName, struct tm& date);
   void showText(const char *t);
   void numberToText();
@@ -101,7 +102,7 @@ public:
   static void compact(ManagedList<FilenameComponent>& fc);
   static int safeLength(ManagedList<FilenameComponent>& fc);
   static void toString(ManagedList<FilenameComponent>& fc,char *s,int n);
-  static void loadValues(ManagedList<FilenameComponent>& fc,int frame_id,int dancer_id,int perf_id);
+  static void loadValues(ManagedList<FilenameComponent>& fc,int frame_id,int dancer_id,int perf_id,int chunk_id);
 };
 
 
@@ -349,6 +350,7 @@ public:
   char* prefix_name;
   char* path_date_connector;
 
+  ManagedList<FilenameComponent>* wcon_fname;
   ManagedList<FilenameComponent>* blobs_fname;
   ManagedList<FilenameComponent>* dance_fname;
   ManagedList<FilenameComponent>* sit_fname;
@@ -413,6 +415,7 @@ public:
     base_directory(NULL),
     prefix_name(NULL),
     path_date_connector(NULL),
+    wcon_fname(NULL),
     blobs_fname(NULL),
     dance_fname(NULL),
     sit_fname(NULL),
@@ -500,8 +503,9 @@ public:
 	
   // Output (mostly done during scanning--this is just for final cleanup)
   void enableOutput(Dancer& d,bool sitting=false);
-  bool prepareOutput(const char* trackerName, const char* path,const char *prefix,bool save_dance,bool save_sit,bool save_img,struct tm* date_to_use);
+  bool prepareOutput(const char* trackerName, const char* path,const char *prefix,bool save_dance,bool save_sit,bool save_img,bool save_wcon,struct tm* date_to_use);
   bool logErrors(char* err_fname);
+  bool writePendingWcon(bool finished);
   bool finishOutput();
   void imprint(Image* im,short borderI,int borderW,short maskI,int maskW,short dancerI,bool show_dancer,
     short sitterI,bool show_sitter,short dcenterI,int dcenterR);
