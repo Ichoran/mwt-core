@@ -10,6 +10,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef ENABLE_SIMD
+#include <smmintrin.h>
+#endif
+
 #include "MWT_Geometry.h"
 #include "MWT_Lists.h"
 #include "MWT_Storage.h"
@@ -3170,6 +3174,175 @@ int Image::floodMask(DualRange threshold,Storage< Stackable<Strip> > *stripstore
   }
   return N_filled;
 }
+
+
+/*
+// Finds the maximum value for each Y over all X in the rectangle
+void Image::maxOverX(Rectangle target, short *output) {
+}
+
+// Finds the maximum value for each X over all Y in the rectangle
+void Image::maxOverY(Rectangle target, short *output) {
+}
+
+// Finds the minimum value for each Y over all X in the rectangle
+void Image::minOverX(Rectangle target, short *output) {
+}
+
+// Finds the minimum value for each X over all Y in the rectangle
+void Image::minOverY(Rectangle target, short *output) {
+}
+
+// Finds the mean value for each Y averaged over all of X in the rectangle
+void Image::meanOverX(Rectangle target, float* output) {
+}
+
+// Finds the mean value for each X averaged over all of Y in the rectangle
+void Image::meanOverY(Rectangle target, float* output) {
+}
+
+// Finds the standard deviation for each Y across all X in the rectangle, given the means
+void Image::deviationOverX(Rectangle target, float* means, float* output) {
+}
+
+// Finds the standard deviation for each X across all Y in the rectangle, given the means
+void Image::deviationOverY(Rectangle target, float* means, float* output) {
+}
+*/
+// Finds the maximum value for each Y over all X in the rectangle
+void Image::maxOverX(Rectangle target, short *output) {
+  Rectangle safe = target * getBounds();
+  for (int y = safe.near.y; y <= safe.far.y; y++) output[y-safe.near.y] = get(safe.near.x, y);
+  for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+    for (int y = safe.near.y; y <= safe.far.y; y++) {
+      auto p = output[y - safe.near.y];
+      auto q = get(x, y);
+      if (q > p) output[y - safe.near.y] = q;
+    }
+  }
+}
+
+// Finds the maximum value for each X over all Y in the rectangle
+void Image::maxOverY(Rectangle target, short *output) {
+  Rectangle safe = target * getBounds();
+  for (int x = safe.near.x; x <= safe.far.x; x++) {
+    short o = get(x, safe.near.y);
+    for (int y = safe.near.y+1; y <= safe.far.y; y++) {
+      auto q = get(x, y);
+      if (q > o) o = q;
+    }
+    output[x - safe.near.x] = o;
+  }
+}
+
+// Finds the minimum value for each Y over all X in the rectangle
+void Image::minOverX(Rectangle target, short *output) {
+  Rectangle safe = target * getBounds();
+  for (int y = safe.near.y; y <= safe.far.y; y++) output[y-safe.near.y] = get(safe.near.x, y);
+  for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+    for (int y = safe.near.y; y <= safe.far.y; y++) {
+      auto p = output[y - safe.near.y];
+      auto q = get(x, y);
+      if (q < p) output[y - safe.near.y] = q;
+    }
+  }
+}
+
+// Finds the minimum value for each X over all Y in the rectangle
+void Image::minOverY(Rectangle target, short *output) {
+  Rectangle safe = target * getBounds();
+  for (int x = safe.near.x; x <= safe.far.x; x++) {
+    short o = get(x, safe.near.y);
+    for (int y = safe.near.y+1; y <= safe.far.y; y++) {
+      auto q = get(x, y);
+      if (q < o) o = q;
+    }
+    output[x - safe.near.x] = o;
+  }
+}
+
+// Finds the mean value for each Y averaged over all of X in the rectangle
+void Image::meanOverX(Rectangle target, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int y = safe.near.y; y <= safe.far.y; y += 4) {
+      __m128 sum4 = _mm_cvtpi16_ps(*(__m64*)(&rare(safe.near.x, y)));
+      for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+        __m128 next4 = _mm_cvtpi16_ps(*(__m64*)(&rare(x, y)));
+        sum4 = _mm_add_ps(sum4, next4);
+      }
+      sum4 = _mm_div_ps(sum4, _mm_set_ps1(safe.width() < 1 ? 1 : safe.width()));
+      *(__m128*)(output + (y-safe.near.y)) = sum4;
+    }  
+  }
+  else {
+#endif
+    for (int y = safe.near.y; y <= safe.far.y; y++) {
+      int sum = 0;
+      for (int x = safe.near.x; x <= safe.far.x; x++) sum += get(x, y);
+      output[y - safe.near.y] = (float)((double)sum / safe.width());
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the mean value for each X averaged over all of Y in the rectangle
+void Image::meanOverY(Rectangle target, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      __m128 accum = _mm_cvtpi16_ps(*(__m64*)(&rare(x, safe.near.y)));
+      for (int y = safe.near.y+4; y <= safe.far.y; y += 4) {
+        __m128 data4 = _mm_cvtpi16_ps(*(__m64*)(&rare(x, y)));
+        accum = _mm_add_ps(accum, data4);
+      }
+      float sum = ((float*)(&accum))[0] + ((float*)(&accum))[1] + ((float*)(&accum))[2] + ((float*)(&accum))[3];
+      output[x - safe.near.x] = sum / safe.height();
+    }
+  }
+  else {
+#endif
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      int sum = 0;
+      for (int y = safe.near.y; y <= safe.far.y; y++) sum += get(x, y);
+      output[x - safe.near.x] = (float)((double)sum / safe.height());
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the standard deviation for each Y across all X in the rectangle, given the means
+void Image::deviationOverX(Rectangle target, float* means, float* output) {
+  Rectangle safe = target * getBounds();
+  for (int y = safe.near.y; y <= safe.far.y; y++) {
+    double ssqe = 0;
+    auto m = means[y - safe.near.y];
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      auto q = (float)get(x, y) - m;
+      ssqe += (double)(q*q);
+    }
+    output[y - safe.near.y] = (float)(sqrt(ssqe) / safe.width());
+  }
+}
+
+// Finds the standard deviation for each X across all Y in the rectangle, given the means
+void Image::deviationOverY(Rectangle target, float* means, float* output) {
+  Rectangle safe = target * getBounds();
+  for (int x = safe.near.x; x <= safe.far.x; x++) {
+    int sum = 0;
+    auto m = means[x - safe.near.x];
+    for (int y = safe.near.y; y <= safe.far.y; y++) {
+      auto q = (float)get(x, y) - m;
+      sum += (double)(q*q);
+    }
+    output[x - safe.near.x] = (float)(sqrt(sum) / safe.height());
+  }
+}
+
 
 
 // Creates an appropriate TIFF header for this image; returns header size

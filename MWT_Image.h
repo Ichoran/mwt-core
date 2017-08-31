@@ -616,7 +616,17 @@ public:
   void diffCopy8(const Image8& source,Mask& m,const Image& bg);
   void diffAdaptCopy8(Point where,const Image8& source,Point size,Image& bg,int rate);  // Same as diffCopy (but bg gets adapted)
   void diffAdaptCopy8(const Image8& source,Mask& m,Image& bg,int rate);
-  
+
+  // Projections
+  void maxOverX(Rectangle target, short *output);
+  void maxOverY(Rectangle target, short *output);
+  void minOverX(Rectangle target, short *output);
+  void minOverY(Rectangle target, short *output);
+  void meanOverX(Rectangle target, float* output);
+  void meanOverY(Rectangle target, float* output);
+  void deviationOverX(Rectangle target, float* means, float* output);
+  void deviationOverY(Rectangle target, float* means, float* output);
+
   // Flood fills--note that resulting strips are unsorted
   void floodLine(FloodInfo& info,FloodData* data,Stackable<Strip>*& head,Stackable<Strip>*& tail);
   int floodFind(Point pt,DualRange threshold,Storage< Stackable<Strip> > *store,FloodData *result);
@@ -800,7 +810,17 @@ public:
   void copy16(Point where,const Image& source,Point size,bool fix_depth=false);
   void copy16(const Image& source,Mask& m,bool fix_depth=false);
   void copy16(const Image& source,bool fix_depth=false) { copy16( source.bounds.near , source , source.size , fix_depth ); }
-  
+      
+  // Projections
+  void maxOverX(Rectangle target, uint8_t *output);
+  void maxOverY(Rectangle target, uint8_t *output);
+  void minOverX(Rectangle target, uint8_t *output);
+  void minOverY(Rectangle target, uint8_t *output);
+  void meanOverX(Rectangle target, float* output);
+  void meanOverY(Rectangle target, float* output);
+  void deviationOverX(Rectangle target, float* means, float* output);
+  void deviationOverY(Rectangle target, float* means, float* output);
+
   // Output and testing
   int makeTiffHeader(unsigned char *buffer);
   int writeTiff(FILE *f);

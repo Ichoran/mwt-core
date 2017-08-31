@@ -9,11 +9,11 @@ FLAGS = -Wall -O2 -fno-strict-aliasing -ggdb3
 ifeq ($(OS),Windows_NT)
     CC = mingw32-g++ -std=gnu++11
     OUTDIR = lib
-    TGT = -DWINDOWS 
+    TGT = -DWINDOWS -DENABLE_SIMD
 else
     CC = g++ -std=gnu++11
 #   CC = clang++ -std=c++11 -DCLANG_WORKAROUND
-    TGT = -DLINUX
+    TGT = -DLINUX -DENABLE_SIMD
 endif
 
 UNIT = -DUNIT_TEST_OWNER
