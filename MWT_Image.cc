@@ -3265,7 +3265,7 @@ void Image::minOverY(Rectangle target, short *output) {
 void Image::meanOverX(Rectangle target, float* output) {
   Rectangle safe = target * getBounds();
 #ifdef ENABLE_SIMD
-  if (safe.height() % 4 == 0 && bin <= 1) {
+  if (safe.height() % 4 == 0 && bin <= -1) {
     for (int y = safe.near.y; y <= safe.far.y; y += 4) {
       __m128 sum4 = _mm_cvtpi16_ps(*(__m64*)(&rare(safe.near.x, y)));
       for (int x = safe.near.x+1; x <= safe.far.x; x++) {
@@ -3292,7 +3292,7 @@ void Image::meanOverX(Rectangle target, float* output) {
 void Image::meanOverY(Rectangle target, float* output) {
   Rectangle safe = target * getBounds();
 #ifdef ENABLE_SIMD
-  if (safe.height() % 4 == 0 && bin <= 1) {
+  if (safe.height() % 4 == 0 && bin <= -1) {
     for (int x = safe.near.x; x <= safe.far.x; x++) {
       __m128 accum = _mm_cvtpi16_ps(*(__m64*)(&rare(x, safe.near.y)));
       for (int y = safe.near.y+4; y <= safe.far.y; y += 4) {
@@ -4489,6 +4489,85 @@ int test_mwt_image_image8() {
   return 0;
 }
 
+bool test_same_shorts(short *a, short *b, int n) {
+  while (n > 0) {
+    if (*a++ != *b++) return false;
+    n--;
+  }
+  return true;
+}
+
+void test_print_shorts(short *a, short *b, int n) {
+  while (n > 0) {
+    printf("%04a %04a\n", *a++, *b++);
+    n --;
+  }
+}
+
+void test_print_floats(float *a, float *b, int n) {
+  while (n > 0) {
+    printf("%8.4f %8.4f\n", *a++, *b++);
+    n --;
+  }
+}
+
+bool test_same_floats(float *a, float *b, int n) {
+  while (n > 0) {
+    float err = fabsf(*a++ - *b++);
+    if (err > 1.5e-4) return false;
+    n--;
+  }
+  return true;
+}
+
+int test_mwt_image_flattening() {
+  int test_image_height = 8;
+  int test_image_width = 12;
+  short test_image[] = {
+    0x00, 0x00, 0x00, 0x00, 0x80, 0x80, 0x80, 0xA0,
+    0x00, 0x00, 0x00, 0x00, 0x80, 0x80, 0xFF, 0xFF,
+    0x00, 0x00, 0x80, 0x80, 0x80, 0x80, 0xFF, 0xFF,
+    0x00, 0x10, 0x80, 0x80, 0x80, 0x80, 0xFF, 0xFF,
+    0x00, 0x20, 0x80, 0x80, 0x80, 0x80, 0xFF, 0xFF,
+    0x00, 0x30, 0x80, 0x80, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x40, 0x80, 0x80, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x50, 0x80, 0x80, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x60, 0x80, 0xFF, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x70, 0x80, 0xFF, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x80, 0x80, 0xFF, 0xFF, 0x80, 0xFF, 0xFF,
+    0x10, 0x80, 0xFF, 0xFF, 0xFF, 0x80, 0xFF, 0xFF
+  };
+  short test_image_max_y[] = {0xA0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  short test_image_max_x[] = {0x10, 0x80, 0xFF, 0xFF, 0xFF, 0x80, 0xFF, 0xFF};
+  short test_image_min_y[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10};
+  short test_image_min_x[] = {0x00, 0x00, 0x00, 0x00, 0x80, 0x80, 0x80, 0xA0};
+  float test_image_mean_y[] = {68, 95.75, 127.75, 129.75, 131.75, 149.625, 151.625, 153.625, 171.5, 173.5, 175.5, 193.375};
+  float test_image_mean_x[] = {1.333333, 58.666668, 117.25, 149, 202.083328, 128, 244.416672, 247.083328};
+  float test_image_sd_y[] = {68.7023, 105.7553, 90.1565, 87.4368, 84.9599, 91.8081, 89.7231, 87.9075, 91.3688, 89.8568, 88.6355, 85.8763};
+  float test_image_sd_x[] = {4.4222, 47.7028, 62.9221, 87.5557, 62.6119, 0, 35.1009, 26.2566};
+
+  short result_short_y[12];
+  short result_short_x[8];
+  float result_float_y[12];
+  float result_float_x[8];
+
+  Image im(test_image, Point(test_image_width, test_image_height), false);
+
+  im.meanOverY(Rectangle(0, 8, 0, 12), result_float_y);
+  if (!test_same_floats(result_float_y, test_image_mean_y, 12)) {
+    test_print_floats(result_float_y, test_image_mean_y, 12);
+    return 1;
+  }
+
+  im.meanOverX(Rectangle(0, 8, 0, 12), result_float_x);
+  if (!test_same_floats(result_float_x, test_image_mean_x, 8)) {
+    test_print_floats(result_float_x, test_image_mean_x, 8);
+    return 2;
+  }
+
+  return 0;
+}
+
 int test_mwt_image()
 {
   return 
@@ -4496,7 +4575,8 @@ int test_mwt_image()
     10*test_mwt_image_mask() + 
     1000*test_mwt_image_contour() + 
     10000*test_mwt_image_image() +
-    1000000*test_mwt_image_image8();
+    1000000*test_mwt_image_image8() +
+    100000000*test_mwt_image_flattening();
 }
 
 #ifdef UNIT_TEST_OWNER
