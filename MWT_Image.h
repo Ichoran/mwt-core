@@ -818,8 +818,8 @@ public:
   void minOverY(Rectangle target, uint8_t *output);
   void meanOverX(Rectangle target, float* output);
   void meanOverY(Rectangle target, float* output);
-  void deviationOverX(Rectangle target, float* means, float* output);
-  void deviationOverY(Rectangle target, float* means, float* output);
+  void deviationOverX(Rectangle target, const float* means, float* output);
+  void deviationOverY(Rectangle target, const float* means, float* output);
 
   // Output and testing
   int makeTiffHeader(unsigned char *buffer);

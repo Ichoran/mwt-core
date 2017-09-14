@@ -3176,39 +3176,6 @@ int Image::floodMask(DualRange threshold,Storage< Stackable<Strip> > *stripstore
 }
 
 
-/*
-// Finds the maximum value for each Y over all X in the rectangle
-void Image::maxOverX(Rectangle target, short *output) {
-}
-
-// Finds the maximum value for each X over all Y in the rectangle
-void Image::maxOverY(Rectangle target, short *output) {
-}
-
-// Finds the minimum value for each Y over all X in the rectangle
-void Image::minOverX(Rectangle target, short *output) {
-}
-
-// Finds the minimum value for each X over all Y in the rectangle
-void Image::minOverY(Rectangle target, short *output) {
-}
-
-// Finds the mean value for each Y averaged over all of X in the rectangle
-void Image::meanOverX(Rectangle target, float* output) {
-}
-
-// Finds the mean value for each X averaged over all of Y in the rectangle
-void Image::meanOverY(Rectangle target, float* output) {
-}
-
-// Finds the standard deviation for each Y across all X in the rectangle, given the means
-void Image::deviationOverX(Rectangle target, float* means, float* output) {
-}
-
-// Finds the standard deviation for each X across all Y in the rectangle, given the means
-void Image::deviationOverY(Rectangle target, float* means, float* output) {
-}
-*/
 // Finds the maximum value for each Y over all X in the rectangle
 void Image::maxOverX(Rectangle target, short *output) {
   Rectangle safe = target * getBounds();
@@ -4111,6 +4078,337 @@ void Image8::copy16(const Image& source, Mask& m, bool fix_depth)
 }
 
 
+
+// Finds the maximum value for each Y over all X in the rectangle
+void Image8::maxOverX(Rectangle target, uint8_t *output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int y = safe.near.y; y <= safe.far.y ; y += 8) {
+      if (y+4 >= safe.far.y) {
+        __m64 max8;
+        __m64 next8;
+        uint32_t last = *((uint32_t*)&rare(safe.near.x, y));
+        *((uint32_t*)&max8) = last;
+        *(((uint32_t*)&max8)+1) = last;
+        *(((uint32_t*)&next8)+1) = last;
+        for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+          *((uint32_t*)&next8) = *((uint32_t*)&rare(x, y));
+          max8 = _mm_max_pu8(max8, next8);
+        }
+        *((uint32_t*)output) = *((uint32_t*)&max8);
+      }
+      else
+      {
+        __m64 max8 = *((__m64*)&rare(safe.near.x, y));
+        for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+          __m64 next8 = *((__m64*)&rare(x, y));
+          max8 = _mm_max_pu8(max8, next8);
+        }
+        *((__m64*)(output + (y - safe.near.y))) = max8;
+      }
+    }
+  }
+  else {
+#endif
+    for (int y = safe.near.y; y <= safe.far.y; y++) output[y-safe.near.y] = get(safe.near.x, y);
+    for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+      for (int y = safe.near.y; y <= safe.far.y; y++) {
+        auto p = output[y - safe.near.y];
+        auto q = get(x, y);
+        if (q > p) output[y - safe.near.y] = q;
+      }
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the maximum value for each X over all Y in the rectangle
+void Image8::maxOverY(Rectangle target, uint8_t *output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      __m64 accum;
+      int y = safe.near.y;
+      if (y+7 <= safe.far.y) {
+        accum = *((__m64*)&rare(x, safe.near.y));
+        y += 8;
+      }
+      else {
+        uint32_t temp = *((uint32_t*)&rare(x, safe.near.y));
+        *((uint32_t*)&accum) = temp;
+        *(((uint32_t*)&accum)+1) = temp;
+        y += 4;
+      }
+      for (; y+7 <= safe.far.y; y += 8) {
+        accum = _mm_max_pu8(accum, *((__m64*)&rare(x, y)));
+      }
+      if (y+3 <= safe.far.y) {
+        __m64 last;
+        uint32_t temp = *((uint32_t*)&rare(x, y));
+        *((uint32_t*)&last) = temp;
+        *(((uint32_t*)&last)+1) = temp;
+        accum = _mm_max_pu8(accum, last);
+        y += 4;
+      }
+      accum = _mm_max_pu8(accum, _mm_shuffle_pi16(accum, 0x4E));
+      accum = _mm_max_pu8(accum, _mm_shuffle_pi16(accum, 0xB1));
+      uint16_t pair = *((uint16_t*)&accum);
+      uint8_t lo = (uint8_t)pair;
+      uint8_t hi = (uint8_t)(pair >> 8);
+      output[x - safe.near.x] = (lo < hi) ? hi : lo;
+    }
+  }
+  else {
+#endif
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      short o = get(x, safe.near.y);
+      for (int y = safe.near.y+1; y <= safe.far.y; y++) {
+        auto q = get(x, y);
+        if (q > o) o = q;
+      }
+      output[x - safe.near.x] = o;
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the minimum value for each Y over all X in the rectangle
+void Image8::minOverX(Rectangle target, uint8_t *output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int y = safe.near.y; y <= safe.far.y ; y += 8) {
+      if (y+4 >= safe.far.y) {
+        __m64 min8;
+        __m64 next8;
+        uint32_t last = *((uint32_t*)&rare(safe.near.x, y));
+        *((uint32_t*)&min8) = last;
+        *(((uint32_t*)&min8)+1) = last;
+        *(((uint32_t*)&next8)+1) = last;
+        for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+          *((uint32_t*)&next8) = *((uint32_t*)&rare(x, y));
+          min8 = _mm_min_pu8(min8, next8);
+        }
+        *((uint32_t*)output) = *((uint32_t*)&min8);
+      }
+      else
+      {
+        __m64 min8 = *((__m64*)&rare(safe.near.x, y));
+        for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+          __m64 next8 = *((__m64*)&rare(x, y));
+          min8 = _mm_min_pu8(min8, next8);
+        }
+        *((__m64*)(output + (y - safe.near.y))) = min8;
+      }
+    }
+  }
+  else {
+#endif
+    for (int y = safe.near.y; y <= safe.far.y; y++) output[y-safe.near.y] = get(safe.near.x, y);
+    for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+      for (int y = safe.near.y; y <= safe.far.y; y++) {
+        auto p = output[y - safe.near.y];
+        auto q = get(x, y);
+        if (q < p) output[y - safe.near.y] = q;
+      }
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the minimum value for each X over all Y in the rectangle
+void Image8::minOverY(Rectangle target, uint8_t *output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      __m64 accum;
+      int y = safe.near.y;
+      if (y+7 <= safe.far.y) {
+        accum = *((__m64*)&rare(x, safe.near.y));
+        y += 8;
+      }
+      else {
+        uint32_t temp = *((uint32_t*)&rare(x, safe.near.y));
+        *((uint32_t*)&accum) = temp;
+        *(((uint32_t*)&accum)+1) = temp;
+        y += 4;
+      }
+      for (; y+7 <= safe.far.y; y += 8) {
+        accum = _mm_min_pu8(accum, *((__m64*)&rare(x, y)));
+      }
+      if (y+3 <= safe.far.y) {
+        __m64 last;
+        uint32_t temp = *((uint32_t*)&rare(x, y));
+        *((uint32_t*)&last) = temp;
+        *(((uint32_t*)&last)+1) = temp;
+        accum = _mm_min_pu8(accum, last);
+        y += 4;
+      }
+      accum = _mm_min_pu8(accum, _mm_shuffle_pi16(accum, 0x4E));
+      accum = _mm_min_pu8(accum, _mm_shuffle_pi16(accum, 0xB1));
+      uint16_t pair = *((uint16_t*)&accum);
+      uint8_t lo = (uint8_t)pair;
+      uint8_t hi = (uint8_t)(pair >> 8);
+      output[x - safe.near.x] = (hi < lo) ? hi : lo;
+    }
+  }
+  else {
+#endif
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      short o = get(x, safe.near.y);
+      for (int y = safe.near.y+1; y <= safe.far.y; y++) {
+        auto q = get(x, y);
+        if (q < o) o = q;
+      }
+      output[x - safe.near.x] = o;
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the mean value for each Y averaged over all of X in the rectangle
+void Image8::meanOverX(Rectangle target, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int y = safe.near.y; y <= safe.far.y; y += 4) {
+      __m128 sum4 = _mm_set_ps1(0.0);
+      for (int x = safe.near.x; x <= safe.far.x; x++) {
+        uint8_t *p = &rare(x, y);
+        __m128 next4 = _mm_cvtpi16_ps(_mm_set_pi16((short)p[3], (short)p[2], (short)p[1], (short)p[0]));
+        sum4 = _mm_add_ps(sum4, next4);
+      }
+      sum4 = _mm_div_ps(sum4, _mm_set_ps1(safe.width() < 1 ? 1 : safe.width()));
+      *(__m128*)(output + (y-safe.near.y)) = sum4;
+    }  
+  }
+  else {
+#endif
+    for (int y = safe.near.y; y <= safe.far.y; y++) {
+      int sum = 0;
+      for (int x = safe.near.x; x <= safe.far.x; x++) sum += get(x, y);
+      output[y - safe.near.y] = (float)((double)sum / safe.width());
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the mean value for each X averaged over all of Y in the rectangle
+void Image8::meanOverY(Rectangle target, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      __m128 accum = _mm_set_ps1(0.0);
+      for (int y = safe.near.y; y <= safe.far.y; y += 4) {
+        uint8_t *p = &rare(x, y);
+        __m128 data4 = _mm_cvtpi16_ps(_mm_set_pi16((short)p[3], (short)p[2], (short)p[1], (short)p[0]));
+        accum = _mm_add_ps(accum, data4);
+      }
+      float sum = ((float*)(&accum))[0] + ((float*)(&accum))[1] + ((float*)(&accum))[2] + ((float*)(&accum))[3];
+      output[x - safe.near.x] = sum / safe.height();
+    }
+  }
+  else {
+#endif
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      int sum = 0;
+      for (int y = safe.near.y; y <= safe.far.y; y++) sum += get(x, y);
+      output[x - safe.near.x] = (float)((double)sum / safe.height());
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the standard deviation for each Y across all X in the rectangle, given the means
+void Image8::deviationOverX(Rectangle target, const float* means, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int y = safe.near.y; y <= safe.far.y; y += 4) {
+      __m128 sumsq4 = _mm_set_ps1(0.0);
+      __m128 meanys = *((__m128*)(means + (y-safe.near.y)));
+      for (int x = safe.near.x; x <= safe.far.x; x++) {
+        uint8_t *p = &rare(x, y);
+        __m128 next4 = _mm_cvtpi16_ps(_mm_set_pi16((short)p[3], (short)p[2], (short)p[1], (short)p[0]));
+        __m128 delta = _mm_sub_ps(next4, meanys);
+        sumsq4 = _mm_add_ps(sumsq4, _mm_mul_ps(delta, delta));
+      }
+      sumsq4 = _mm_div_ps(sumsq4, _mm_set_ps1(safe.width() < 2 ? 1 : (safe.width() - 1)));
+      *(__m128*)(output + (y-safe.near.y)) = _mm_sqrt_ps(sumsq4);
+    }
+  }
+  else {
+#endif
+    for (int y = safe.near.y; y <= safe.far.y; y++) {
+      double ssqe = 0;
+      auto m = means[y - safe.near.y];
+      for (int x = safe.near.x; x <= safe.far.x; x++) {
+        auto q = (float)get(x, y) - m;
+        ssqe += (double)(q*q);
+      }
+      auto w = safe.width() - 1; if (w < 1) w = 1;
+      output[y - safe.near.y] = (float)(sqrt(ssqe / w));
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the standard deviation for each X across all Y in the rectangle, given the means
+void Image8::deviationOverY(Rectangle target, const float* means, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      __m128 sumsq4 = _mm_set_ps1(0.0);
+      __m128 meanxs = _mm_set_ps1(*(means + (x - safe.near.x)));
+      for (int y = safe.near.y; y <= safe.far.y; y += 4) {
+        uint8_t *p = &rare(x, y);
+        __m128 next4 = _mm_cvtpi16_ps(_mm_set_pi16((short)p[3], (short)p[2], (short)p[1], (short)p[0]));
+        __m128 delta = _mm_sub_ps(next4, meanxs);
+        sumsq4 = _mm_add_ps(sumsq4, _mm_mul_ps(delta, delta));
+      }
+      output[x - safe.near.x] = ((float*)(&sumsq4))[0] + ((float*)(&sumsq4))[1] + ((float*)(&sumsq4))[2] + ((float*)(&sumsq4))[3];
+    }
+    __m128 n = _mm_set_ps1((float)(safe.height() - 1));
+    int x = safe.near.x;
+    for ( ; x <= safe.far.x-3; x += 4) {
+      __m128 four = *((__m128*)(output + (x - safe.near.x)));
+      *(__m128*)(output + (x - safe.near.x)) = _mm_sqrt_ps(_mm_div_ps(four, n));
+    }
+    for (; x <= safe.far.x; x++) {
+      _mm_store_ss(output + (x-safe.near.x), _mm_sqrt_ss(_mm_load_ps1(output + (x - safe.near.x))));
+    }
+  }
+  else {
+#endif
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      int sum = 0;
+      auto m = means[x - safe.near.x];
+      for (int y = safe.near.y; y <= safe.far.y; y++) {
+        auto q = (float)get(x, y) - m;
+        sum += (double)(q*q);
+      }
+      auto h = safe.height() - 1; if (h < 1) h = 1;
+      output[x - safe.near.x] = (float)(sqrt(sum / h));
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+
+
 // Creates an appropriate TIFF header for this image; returns header size
 int Image8::makeTiffHeader(unsigned char *buffer)
 {
@@ -4611,6 +4909,21 @@ int test_mwt_image_image8() {
   return 0;
 }
 
+bool test_same_bytes(uint8_t *a, uint8_t *b, int n) {
+  while (n > 0) {
+    if (*a++ != *b++) return false;
+    n--;
+  }
+  return true;
+}
+
+void test_print_bytes(uint8_t *a, uint8_t *b, int n) {
+  while (n > 0) {
+    printf("%02X %02X\n", *a++, *b++);
+    n --;
+  }
+}
+
 bool test_same_shorts(short *a, short *b, int n) {
   while (n > 0) {
     if (*a++ != *b++) return false;
@@ -4721,6 +5034,77 @@ int test_mwt_image_flattening() {
   if (!test_same_floats(result_float_x, test_image_sd_x, test_image_height)) {
     test_print_floats(result_float_x, test_image_sd_x, test_image_height);
     return 8;
+  }
+
+  uint8_t test_image8[] = {
+    0x00, 0x00, 0x00, 0x00, 0x80, 0x80, 0x80, 0xA0,
+    0x00, 0x00, 0x00, 0x00, 0x80, 0x80, 0xFF, 0xFF,
+    0x00, 0x00, 0x80, 0x80, 0x80, 0x80, 0xFF, 0xFF,
+    0x00, 0x10, 0x80, 0x80, 0x80, 0x80, 0xFF, 0xFF,
+    0x00, 0x20, 0x80, 0x80, 0x80, 0x80, 0xFF, 0xFF,
+    0x00, 0x30, 0x80, 0x80, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x40, 0x80, 0x80, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x50, 0x80, 0x80, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x60, 0x80, 0xFF, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x70, 0x80, 0xFF, 0xFF, 0x80, 0xFF, 0xFF,
+    0x00, 0x80, 0x80, 0xFF, 0xFF, 0x80, 0xFF, 0xFF,
+    0x10, 0x80, 0xFF, 0xFF, 0xFF, 0x80, 0xFF, 0xFF
+  };
+  uint8_t test_image8_max_y[] = {0xA0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  uint8_t test_image8_max_x[] = {0x10, 0x80, 0xFF, 0xFF, 0xFF, 0x80, 0xFF, 0xFF};
+  uint8_t test_image8_min_y[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10};
+  uint8_t test_image8_min_x[] = {0x00, 0x00, 0x00, 0x00, 0x80, 0x80, 0x80, 0xA0};
+  uint8_t result_byte_y[12];
+  uint8_t result_byte_x[8];
+
+  Image8 im8(test_image8, Point(test_image_width, test_image_height), false);
+
+  im8.maxOverY(Rectangle(0, test_image_width, 0, test_image_height), result_byte_y);
+  if (!test_same_bytes(result_byte_y, test_image8_max_y, test_image_width)) {
+    test_print_bytes(result_byte_y, test_image8_max_y, test_image_width);
+    return 11;
+  }
+
+  im8.maxOverX(Rectangle(0, test_image_width, 0, test_image_height), result_byte_x);
+  if (!test_same_bytes(result_byte_x, test_image8_max_x, test_image_height)) {
+    test_print_bytes(result_byte_x, test_image8_max_x, test_image_height);
+    return 12;
+  }
+
+  im8.minOverY(Rectangle(0, test_image_width, 0, test_image_height), result_byte_y);
+  if (!test_same_bytes(result_byte_y, test_image8_min_y, test_image_width)) {
+    test_print_bytes(result_byte_y, test_image8_min_y, test_image_width);
+    return 13;
+  }
+
+  im8.minOverX(Rectangle(0, test_image_width, 0, test_image_height), result_byte_x);
+  if (!test_same_bytes(result_byte_x, test_image8_min_x, test_image_height)) {
+    test_print_bytes(result_byte_x, test_image8_min_x, test_image_height);
+    return 14;
+  }
+
+  im8.meanOverY(Rectangle(0, test_image_width, 0, test_image_height), result_float_y);
+  if (!test_same_floats(result_float_y, test_image_mean_y, test_image_width)) {
+    test_print_floats(result_float_y, test_image_mean_y, test_image_width);
+    return 15;
+  }
+
+  im8.meanOverX(Rectangle(0, test_image_width, 0, test_image_height), result_float_x);
+  if (!test_same_floats(result_float_x, test_image_mean_x, test_image_height)) {
+    test_print_floats(result_float_x, test_image_mean_x, test_image_height);
+    return 16;
+  }
+
+  im8.deviationOverY(Rectangle(0, test_image_width, 0, test_image_height), test_image_mean_y, result_float_y);
+  if (!test_same_floats(result_float_y, test_image_sd_y, test_image_width)) {
+    test_print_floats(result_float_y, test_image_sd_y, test_image_width);
+    return 17;
+  }
+
+  im8.deviationOverX(Rectangle(0, test_image_width, 0, test_image_height), test_image_mean_x, result_float_x);
+  if (!test_same_floats(result_float_x, test_image_sd_x, test_image_height)) {
+    test_print_floats(result_float_x, test_image_sd_x, test_image_height);
+    return 18;
   }
 
   return 0;
