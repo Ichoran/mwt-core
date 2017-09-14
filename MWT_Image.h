@@ -624,8 +624,8 @@ public:
   void minOverY(Rectangle target, short *output);
   void meanOverX(Rectangle target, float* output);
   void meanOverY(Rectangle target, float* output);
-  void deviationOverX(Rectangle target, float* means, float* output);
-  void deviationOverY(Rectangle target, float* means, float* output);
+  void deviationOverX(Rectangle target, const float* means, float* output);
+  void deviationOverY(Rectangle target, const float* means, float* output);
 
   // Flood fills--note that resulting strips are unsorted
   void floodLine(FloodInfo& info,FloodData* data,Stackable<Strip>*& head,Stackable<Strip>*& tail);
