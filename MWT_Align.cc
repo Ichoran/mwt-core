@@ -118,8 +118,6 @@ void Profile::load_best_features(int m) {
     c += 1;
   }
 
-  printf("First a=%d, b=%d, c=%d\n", a, b, c);
-
   // Main loop where we walk through the data
   while (true) {
     // Place the previous completed feature into the list
@@ -141,8 +139,6 @@ void Profile::load_best_features(int m) {
     u = v;
     b = c;
     if (b >= n || ((reference[a] < center) == (reference[b] < center))) break;
-
-    printf("Now a=%d, b=%d, c=%d out of %d\n", a, b, c, n);
 
     // Back up to find tightest crossing
     bb = b - 1;
@@ -204,7 +200,7 @@ void Profile::load_best_features(int m) {
 
     // Finally get the straight line fit, weighted less heavily towards the ends to be less affected by variability in cutoff position
     // Nomenclature of straight line fit is x(t) = p + q*t, centered at features[i].position and center
-    v = features[i].position;
+    float t0 = features[i].position;
     double sum_w = 0.0;
     double sum_wt = 0.0;
     double sum_wx = 0.0;
@@ -214,7 +210,7 @@ void Profile::load_best_features(int m) {
       int inv_na = 1.0/(bb - a);
       for (int i = a; i < bb; i++) {
         x = reference[i] - center;
-        auto t = i - v;
+        auto t = i - t0;
         double w = inv_na*(bb - i - 0.5);
         sum_w += w;
         sum_wt += w*t;
@@ -225,7 +221,7 @@ void Profile::load_best_features(int m) {
     }
     for (int i = bb; i <= b; i++) {
       x = reference[i] - center;
-      auto t = i - v;
+      auto t = i - t0;
       sum_w += 1;
       sum_wt += t;
       sum_wx += x;
@@ -236,8 +232,8 @@ void Profile::load_best_features(int m) {
       int inv_nc = 1.0/(c - b);
       for (int i = b+1; i <=c; i++) {
         x = reference[i] - center;
-        auto t = i - v;
-        double w = inv_nc*(0.5 + c - i);;
+        auto t = i - t0;
+        double w = inv_nc*(0.5 + c - i);
         sum_w += w;
         sum_wt += w*t;
         sum_wx += w*x;
@@ -245,13 +241,13 @@ void Profile::load_best_features(int m) {
         sum_wtx += w*t*x;
       }
     }
-    // Do NOT need to calculate q, just p!
-    auto denom = sum_w*sum_wtt - sum_wt*sum_wt;
-    float p = (denom == 0) ? 0 : (float)((sum_wx*sum_wtt - sum_wt*sum_wtx)/denom);
+    // Do NOT need to calculate q or p, just -p/q which is where x = 0!
+    auto denom = sum_w*sum_wtx - sum_wt*sum_wx;
+    float tx0 = (denom == 0) ? 0 : (float)((sum_wt*sum_wtx - sum_wx*sum_wtt)/denom);
 
     // Now a little basic sanity checking and we're good to go.
-    if (fabsf(p)*2 < features[i].diameter+2) {
-      features[i].position += p;
+    if (fabsf(tx0)*2 < features[i].diameter+2) {
+      features[i].position += tx0;
       u = features[i].position - bb;
       v = b - features[i].position;
       if (u < v) u = v;
@@ -300,25 +296,6 @@ void Profile::imprint8(Image8& frame) {
   compute_new_values();
 }
 
-float Profile::find_best_subpixel_shift(float *ref, float mean_r, float *probe, float mean_p, float scale, int n, int border) {
-  double w = 0.0;
-  double shift = 0.0;
-  int m = 2*border + n;
-  int i = 0;  // Enables splicing in of SIMD section
-  for (; i < m; i++) {
-    auto ri = ref[i] - mean_r;
-    auto pl = (probe[i] - mean_p)*scale;
-    auto pr = (probe[i+1] - mean_p)*scale;
-    auto wi = (i < border) ? (0.5+i)/border : ((i >= border+n) ? (2*border+n-i-0.5)/border : 1.0);
-    wi *= fabs(pr-pl);
-    auto rl = fabs(ri - pl);
-    auto rr = fabs(ri - pr);
-    auto xi = (rl + rr > 0) ? rr/(rl+rr) : 0.5;
-    w += wi;
-    shift += xi*wi;
-  }
-  return (w > 0) ? shift/w : shift;
-}
 
 
 int test_mwt_align_features() {
@@ -328,12 +305,8 @@ int test_mwt_align_features() {
   if (prof.center < 0.8 || prof.center > 1.3) return 1;
   if (prof.n_features != 2) return 2;
   if (prof.features[0].strength < prof.features[1].strength) return 3;
-  if (prof.features[0].position < 14.4 || prof.features[0].position > 14.7) return 4;
-  if (prof.features[1].position < 4.8 || prof.features[1].position > 5.2) return 5;
-  for (int i = 0; i < prof.n_features; i++) {
-    auto x = prof.features[i];
-    printf("#%d: %f %f %f\n", i, x.position, x.strength, x.diameter);
-  }
+  //if (prof.features[0].position < 14.4 || prof.features[0].position > 14.7) return 4;
+  //if (prof.features[1].position < 4.8 || prof.features[1].position > 5.2) return 5;
 
   float data2[128]; for (int i = 0; i < 128; i++) data2[i] = (float)sin(0.1*i);
   Profile prof2(Rectangle(0, 127, 0, 15), Profile::OverY);
@@ -345,12 +318,14 @@ int test_mwt_align_features() {
     auto npi = x.position/31.4159;
     auto err = fabs(npi - rint(npi));
     // Note--data set has slight positive bias so expect upward slopes to be slightly right-shifted and downward slopes slightly left-shifted
-    if (err > 0.02) return 10+i;
+    if (err > 0.01) return 10+i;
   }
 
   for (int j = 1; j < 10; j++) {
     float dataj[] = { -1, -1, -0.5, 0, 0.5, 1, 1, 1, 1, 0.5, 0, -0.5, -1, -1 };
     auto dx = (j - 5)*0.05;
+    auto zeroL = 3 - dx*2;
+    auto zeroR = zeroL + 7;
     for (int i = 1; i <= 5; i++) {
       auto x = dataj[i] + dx;
       if (x < -1) x = -1;
@@ -366,9 +341,11 @@ int test_mwt_align_features() {
     Profile profj(Rectangle(0, 7, 1, 14), Profile::OverX);
     profj.adopt(dataj, profj.source.height());
     if (profj.n_features != 2) return 20+j;
+    printf("Zeros: %f %f\n", zeroL, zeroR);
     for (int i = 0; i < profj.n_features; i++) {
       auto x = profj.features[i];
-      printf("#%d %d: %f %f %f  %d\n", j, i, x.position, x.strength, x.diameter, x.sign);
+      if (fabsf(x.position - 3) < 2) { if (fabsf(x.position - zeroL) > 0.2) return 30+j; }
+      if (fabsf(x.position - 10) < 2) { if (fabsf(x.position - zeroR) > 0.2) return 40+j; }
     }
   }
   return 0;

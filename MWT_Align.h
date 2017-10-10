@@ -78,8 +78,6 @@ private:
   float find_center_via_hist(float *values, int count, ShiftWeight sw);
   void load_best_features(int m);
   void compute_new_values();
-  float find_best_subpixel_shift(float *ref, float mean_r, float *probe, float mean_p, float scale, int n, int border);
-  float find_best_shift(float *probe, float mean_p, float scale);
 public
 :
   /** Quality score for how useful of a profile we have for alignment */
