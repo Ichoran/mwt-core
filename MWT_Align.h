@@ -47,7 +47,7 @@ public:
   }
 };
 
-#
+
 class Profile {
 public:
   enum Collapse { OverX, OverY };
@@ -55,7 +55,7 @@ public:
   float *reference;
   float center;
   float jitter;
-  int hist[64];
+  int* hist;
   Feature1D features[8];
   int n_features;
   Rectangle source;
@@ -70,6 +70,10 @@ public:
       delete[] reference; 
       reference = NULL;
     }
+    if (hist != NULL) {
+      delete[] hist;
+      hist = NULL;
+    }
   }
 
 private:
@@ -78,8 +82,11 @@ private:
   float find_center_via_hist(float *values, int count, ShiftWeight sw);
   void load_best_features(int m);
   void compute_new_values();
-public
-:
+
+  float sort_and_size(Feature1D *data, int k, int *ix);  // Sorts by position, returns mean diameter
+public:
+
+
   /** Quality score for how useful of a profile we have for alignment */
   float quality();
 
@@ -107,13 +114,13 @@ public
   void best_near8(Image8& frame, Point search);
 
   /** Given the profile in `probe`, find the offset between the stored profile and the probe profile. */
-  float align(float *probe, float mean, float precision);
+  float align(Profile* that);
 
   /** Find the offset between the image in `frame` and the stored profile by computing and comparing the new profile. */
-  float delta(Image& frame, float lateral);
+  float delta(Image& frame);
 
   /** Find the offset between the 8 bit image in `frame` and the stored profile by computing and comparing the new profile. */
-  float delta8(Image8& frame, float lateral);
+  float delta8(Image8& frame);
 };
 
 

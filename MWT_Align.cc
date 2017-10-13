@@ -25,7 +25,7 @@
 ****************************************************************/
 
 Profile::Profile(const Rectangle src, Collapse dir) : 
-  reference(NULL), center(0), n_features(0), source(src), direction(dir), lateral_factor(0.0)
+  reference(NULL), center(0), hist(NULL), n_features(0), source(src), direction(dir), lateral_factor(0.0)
 {
   n = (dir == OverX) ? source.height() : source.width();
   border = (n < 10) ? 1 : n/10;
@@ -42,6 +42,7 @@ float Profile::find_mean(float *values, int count) {
 ShiftWeight Profile::histify(float *values, int count) {
   if (count <= 0) return ShiftWeight(0, 0);
   if (count == 1) return ShiftWeight(values[0], 0);
+  if (hist == NULL) hist = new int[64*sizeof(int)];
   memset(hist, 0, 64*sizeof(int));
   float lo = values[0];
   float hi = 0;
@@ -67,6 +68,7 @@ ShiftWeight Profile::histify(float *values, int count) {
 }
 
 float Profile::find_center_via_hist(float *values, int count, ShiftWeight sw) {
+  if (hist == NULL) hist = new int[64*sizeof(int)];   // No data but at least not a segfault
   int n05 = ceil(0.05*count);
   int n95 = n05;
   int i05 = 0; for (; i05 < 64 && n05 > 0; i05++) n05 -= hist[i05];
@@ -296,6 +298,184 @@ void Profile::imprint8(Image8& frame) {
   compute_new_values();
 }
 
+float Profile::sort_and_size(Feature1D *data, int k, int *ix) {
+  if (k < 1) return 0.0;
+  float sumw = data[0].diameter;
+  for (int i = 0; i < k; i++) ix[i] = i;
+  for (int i = 1; i < k; i++) {
+    sumw += data[i].diameter;
+    for (int j = i; j > 0 && data[ix[j]].position < data[ix[j-1]].position; j--) {
+      auto temp = ix[j];
+      ix[j] = ix[j-1];
+      ix[j-1] = temp;
+    }
+  }
+  return sumw;
+}
+
+float Profile::align(Profile* that) {
+  printf("Testing with %d and %d features\n", n_features, that->n_features);
+  if (n_features < 1) return NAN;
+  if (that->n_features < 1) return NAN;
+  if (n_features == 1) {
+    float delta = features[0].position - that->features[0].position;
+    for (int i = 1; i < that->n_features; i++) {
+      float x = features[0].position - that->features[i].position;
+      if (fabsf(x) < fabsf(delta)) { delta = x; }
+    }
+    return delta;
+  }
+  else if (that->n_features == 1) {
+    float delta = features[0].position - that->features[0].position;
+    for (int i = 1; i < n_features; i++) {
+      float x = features[i].position - that->features[0].position;
+      if (fabsf(x) < fabsf(delta)) delta = x;
+    }
+    return delta;
+  }
+  else {
+    int i;
+
+    // Need more extensive search if we're not within the feature widths
+    int thisix[8];
+    int thatix[8];
+    float meanw = 
+      sort_and_size(this->features, this->n_features, thisix) +
+      sort_and_size(that->features, that->n_features, thatix);
+    meanw /= this->n_features + that->n_features;
+
+    // Insertion sort to order features by position (using indexing arrays)
+    printf("  thisix\n");
+    for (i = 0; i < this->n_features; i++) printf("    %d = %f\n", thisix[i], this->features[thisix[i]].position);
+    printf("  thatix:\n");
+    for (i = 0; i < that->n_features; i++) printf("    %d = %f\n", thatix[i], that->features[thatix[i]].position);
+    printf("Going on to higher numbers\n");
+
+    // Precompute spacings; we want these to match reasonably well
+    float thisdx[7]; for (i = 1; i < this->n_features; i++) thisdx[i-1] = this->features[thisix[i]].position - this->features[thisix[i-1]].position;
+    float thatdx[7]; for (i = 1; i < that->n_features; i++) thatdx[i-1] = that->features[thatix[i]].position - that->features[thatix[i-1]].position;
+    float delta[8];
+    int thisn = n_features-1;
+    int thatn = that->n_features-1;
+    printf("  thisdx\n");
+    for (i=0; i<thisn; i++) printf("    %f\n", thisdx[i]);
+    printf("  thatdx\n");
+    for (i=0; i<thatn; i++) printf("    %f\n", thatdx[i]);
+    float meandelta;
+    if (thisn == thatn) {
+      // Maybe they're all the same!
+      printf("Maybe they're all the same!\n");
+      meandelta = 0.0;
+      for (i = 0; i < thisn; i++) delta[i] = thisdx[i] - thatdx[i];
+      for (i = 0; i < thisn; i++) meandelta += fabsf(delta[i]);
+      meandelta /= thisn;
+      bool concordant = true;
+      for (i = 0; concordant && i < thisn; i++) {
+        concordant = fabsf(delta[i]) <= meanw;
+        printf("%s on %f vs %f\n", concordant ? "true" : "false", delta[i], meanw);
+      }
+      if (concordant) {
+        float dpos = 0.0;
+        for (i = 0; i < n_features; i++) dpos += features[thisix[i]].position - that->features[thatix[i]].position;
+        dpos /= n_features;
+        return dpos;
+      }
+    }
+    else meandelta = fabsf(features[0].position) + fabsf(features[n_features-1].position) + fabsf(that->features[0].position) + 1;
+
+    // If we got here, then they're not all the same and we need to try dropping mismatching features
+    Profile *more = (n_features < that->n_features) ? that : this;
+    Profile *less = (n_features < that->n_features) ? this : that;
+    float *moredx = (n_features < that->n_features) ? thatdx : thisdx;
+    float *lessdx = (n_features < that->n_features) ? thisdx : thatdx;
+    int moren = (thisn < thatn) ? thatn : thisn;
+    int lessn = (thisn < thatn) ? thisn : thatn;
+    if (lessn+2 >= moren) {
+      printf("Close enough to try dropping some for a perfect match\n");
+      printf("  More %d at:", moren+1); for (i = 0; i<=moren; i++) printf(" %f", more->features[i].position); printf("\n");
+      printf("  Less %d at:", lessn+1); for (i = 0; i<=lessn; i++) printf(" %f", less->features[i].position); printf("\n");
+      printf("  moredx: "); for (i = 0; i < moren; i++) printf(" %f", moredx[i]); printf("\n");
+      printf("  lessdx: "); for (i = 0; i < lessn; i++) printf(" %f", lessdx[i]); printf("\n");
+      float bestdelta = meandelta;
+      int besti = -1;
+      int bestj = -1;
+      bool two = moren == lessn+2;
+      bool any_concordant = false;
+      for (int skippi = 0; skippi <= moren; skippi++) {
+        for (int skippj = 0; skippj <= moren; skippj++) {
+          if (two && skippj <= skippi) continue;
+          if (moren == lessn+1) skippj = moren+1;
+          printf("  Skipping %d %d\n", skippi, skippj);
+          int il = (skippi == 0) ? ((two && skippj == 1) ? 2 : 1) : 0;
+          int ir = il+1; if (ir==skippi) ir++; if (two && ir==skippj) ir++;
+          int jl = (!two && skippj == 0) ? 1 : 0;
+          int jr = jl+1; if (!two && jr==skippj) jr++;
+          int ndelta = 0;
+          meandelta = 0.0;
+          bool concordant = true;
+          while (concordant && ir <= moren && jr <= lessn) {
+            ndelta += 1;
+            printf("    At %d to %d, %d to %d", il, ir, jl, jr);
+            float di = moredx[il++]; for (; il < ir; il++) di += moredx[il];
+            float dj = lessdx[jl++]; for (; jl < jr; jl++) dj += lessdx[jl];
+            float d = fabs(di-dj);
+            printf(" got %f %f for %f\n", di, dj, d);
+            concordant = concordant && d <= meanw;
+            printf("    Test: %f <= %f\n", d, meanw);
+            if (!concordant) printf("    NOT concordant any more!");
+            meandelta += d;
+            il = ir; ir += 1; if (ir==skippi) ir++; if (two && ir==skippj) ir++;
+            jl = jr; jr += 1; if (!two && jr==skippj) jr++;
+          }
+          if (ndelta > 0 && concordant) {
+            meandelta /= ndelta;
+            if (meandelta < bestdelta) {
+              bestdelta = meandelta;
+              besti = skippi;
+              bestj = skippj;
+              printf("Love it!  %f %d %d\n", bestdelta, besti, bestj);
+              any_concordant = true;
+            }
+            else printf("No because %f >= %f\n", meandelta, bestdelta);
+          }
+          else printf("Not concordant or zero: ndelta==%d\n", ndelta);
+        }
+      }
+      if (any_concordant) {
+        float dpos = 0.0;
+        i = (besti == 0) ? ((two && bestj == 1) ? 2 : 1) : 0;
+        int j = (!two && bestj==0) ? 1 : 0;
+        int np = 0;
+        int *moreix = (n_features < that->n_features) ? thatix : thisix;
+        int *lessix = (n_features < that->n_features) ? thisix : thatix;
+        while (i < more->n_features && j < less->n_features) {
+          dpos += more->features[moreix[i]].position - less->features[lessix[j]].position;
+          np += 1;
+          i += 1; if (i == besti) i++; if (two && i == bestj) i++;
+          j += 1; if (!two && j == bestj) j++;
+        }
+        dpos /= np;
+        return (n_features < that->n_features) ? -dpos : dpos;
+      }
+    }
+
+    // If we reach this point, we couldn't match the pattern at all!
+    // So we'll just try matching the closest feature and hoping for the best.
+    printf("I give up on all this fancy stuff!  Closest is bestest!\n");
+    float best = 2*(features[0].position - that->features[0].position);
+    for (i = 0; i < n_features; i++) {
+      for (int j = 0; j < that->n_features; j++) {
+        float p = features[i].position - that->features[j].position;
+        if (fabsf(p) < fabsf(best)) {
+          printf("Checking %d against %d and got better: %f < %f\n", i, j, p, best);
+          best = p;
+        }
+      }
+    }
+    return best;
+  }
+}
+
 
 
 int test_mwt_align_features() {
@@ -351,9 +531,73 @@ int test_mwt_align_features() {
   return 0;
 }
 
+int test_mwt_align_align() {
+  Rectangle r(0, 21, 0, 21);
+  auto dir = Profile::OverX;
+
+  Profile one_a(r, dir);
+  one_a.n_features = 1;
+  one_a.features[0] = Feature1D(10.7, 1, 5, 1);
+  Profile one_b(r, dir);
+  one_b.n_features = 1;
+  one_b.features[0] = Feature1D(11.3, 1, 5, 1);
+  if (!(fabsf(one_a.align(&one_b) + 0.6) < 0.01)) return 1;
+
+  Profile two_a(r, dir);
+  two_a.n_features = 2;
+  two_a.features[0] = Feature1D(10.7, 1, 5, 1);
+  two_a.features[1] = Feature1D(7.4, 0.8, 5, -1);
+  Profile two_b(r, dir);
+  two_b.n_features = 2;
+  two_b.features[0] = Feature1D(11.3, 1, 5, 1);
+  two_b.features[1] = Feature1D(7.99, 0.8, 5, -1);
+  if (!(fabsf(two_a.align(&one_a)) < 0.01)) return 2;
+  if (!(fabsf(one_a.align(&two_a)) < 0.01)) return 3;
+  if (!(fabsf(two_a.align(&one_b) - one_a.align(&one_b)) < 0.01)) return 4;
+  if (!(fabsf(one_a.align(&two_b) - one_a.align(&one_b)) < 0.01)) return 5;
+
+  Profile three_a(r, dir);
+  three_a.n_features = 3;
+  three_a.features[0] = Feature1D(10.7, 1, 5, 1);
+  three_a.features[1] = Feature1D(11.6, 0.9, 5, -1);
+  three_a.features[2] = Feature1D(7.4, 0.8, 5, -1);
+  if (!(fabsf(three_a.align(&two_b) - one_a.align(&one_b)) < 0.01)) return 6;
+  if (!(fabsf(two_b.align(&three_a) + one_a.align(&one_b)) < 0.01)) return 7;
+
+  Profile three_b(r, dir);
+  three_b.n_features = 3;
+  three_b.features[0] = Feature1D(11.3, 1, 5, 1);
+  three_b.features[1] = Feature1D(12.21, 0.9, 5, -1);
+  three_b.features[2] = Feature1D(23.7, 0.8, 5, 1);
+  if (!(fabsf(three_a.align(&three_b) - one_a.align(&one_b)) < 0.01)) return 8;
+  if (!(fabsf(three_b.align(&three_a) - one_b.align(&one_a)) < 0.01)) return 9;
+
+  Profile four_a(r, dir);
+  four_a.n_features = 4;
+  four_a.features[0] = Feature1D(3.8, 1.1, 5, 1);
+  four_a.features[1] = Feature1D(10.7, 1, 5, 1);
+  four_a.features[2] = Feature1D(11.6, 0.9, 5, -1);
+  four_a.features[3] = Feature1D(7.4, 0.8, 5, -1);
+  if (!(fabsf(four_a.align(&two_b) - one_a.align(&one_b)) < 0.01)) return 10;
+  if (!(fabsf(two_b.align(&four_a) + one_a.align(&one_b)) < 0.01)) return 11;
+
+  Profile five_a(r, dir);
+  five_a.n_features = 5;
+  five_a.features[0] = Feature1D(10.7, 1, 5, 1);
+  five_a.features[1] = Feature1D(13.9, 0.9, 5, -1);
+  five_a.features[2] = Feature1D(16.4, 0.8, 5, 1);
+  five_a.features[3] = Feature1D(7.41, 0.7, 5, -1);
+  five_a.features[4] = Feature1D(2.5, 0.6, 5, 1);
+  if (!(fabsf(five_a.align(&two_b) - one_a.align(&one_b)) < 0.1)) return 10;
+  if (!(fabsf(two_b.align(&five_a) + one_a.align(&one_b)) < 0.1)) return 11;
+
+  return 0;
+}
+
 int test_mwt_align()
 {
-  return test_mwt_align_features();
+  return test_mwt_align_features() +
+    100*test_mwt_align_align();
 }
 
 #ifdef UNIT_TEST_OWNER
