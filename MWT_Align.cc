@@ -458,6 +458,7 @@ float Profile::quality() {
 
 
 
+
 int test_mwt_align_features() {
   float data[] = { 0.1, 0.1, 0.1, 0.1, 0.5, 1.1, 1.7, 2, 2, 2, 2, 2, 2, 2, 1.8, 0.5, 0, 0, 0, 0, 0, 0 };
   Profile prof(Rectangle(0, 21, 0, 21), Profile::OverX);
@@ -585,10 +586,70 @@ int test_mwt_align_align() {
   return 0;
 }
 
+int test_mwt_align_imprint() {
+  char data[16][21] = {
+   /*01234567891123456789*/
+    "       !AWYZYWSYZYWZ",
+    "       !AXZXWYWXYWXZ",
+    "       @NZWYZYWYZWYZ",
+    "        @NZYWWYZWYWZ",
+    "       !AWYZYWSYZYWZ",
+    "       !AXZXWYWXYWXZ",
+    "       @NZWYZYWYZWYZ",
+    "        @NZYWWYZWYWZ",
+    "       !AWYZYWSYZYWZ",
+    "       !AXZXWYWXYWXZ",
+    "       @NZWYZYWYZWYZ",
+    "        @NZYWWYZWYWZ",
+    "       !AWYZYWSYZYWZ",
+    "       !AXZXWYWXYWXZ",
+    "       @NZWYZYWYZWYZ",
+    "        @NZYWWYZWYWZ"
+  };
+  short *data_i16 = new short[20*16*sizeof(short)];
+  uint8_t *data_u8 = new uint8_t[20*16*sizeof(uint8_t)];
+  for (int i = 0; i < 16; i++) {
+    for (int j = 0; j < 20; j++) {
+      data_i16[i*20+j] = (short)data[i][j] * 64;
+      data_u8[i*20+j] = (uint8_t)data[i][j];
+    }
+  }
+
+  Image full_i16(data_i16, Point(16, 20), false);
+  Image8 full_u8(data_u8, Point(16, 20), false);
+
+  Image test_a_i16(full_i16, Rectangle(2, 13, 0, 11), false);
+  Image8 test_a_u8(full_u8, Rectangle(2, 13, 0, 11), false);
+  Profile p_a_i16(Rectangle(2, 9, 0, 11), Profile::OverX);
+  Profile p_a_u8(Rectangle(2, 9, 0, 11), Profile::OverX);
+  p_a_i16.imprint(test_a_i16);
+  auto delta_a1 = p_a_u8.delta8(test_a_u8, &p_a_i16);
+  auto delta_a2 = p_a_i16.delta(test_a_i16, &p_a_u8);
+  if (fabsf(delta_a1) > 0.01) return 1;
+  if (fabsf(delta_a2) > 0.01) return 2;
+  if (fabsf(delta_a1 + delta_a2) > 0.001) return 3;
+
+  Image test_b_i16(full_i16, Rectangle(2, 13, 2, 13), false);
+  Profile p_b_i16(Rectangle(2, 9, 0, 11), Profile::OverX);
+  auto delta_ab = p_b_i16.delta(test_b_i16, &p_a_i16);
+  if (fabsf(delta_ab + 2) > 0.01) { printf("%f\n", delta_ab); return 4; }
+
+  Image8 test_c_u8(full_u8, Rectangle(4, 15, 0, 11), false);
+  Profile p_c_u8a(Rectangle(2, 9, 0, 11), Profile::OverX);
+  Profile p_c_u8b(Rectangle(3, 10, 0, 11), Profile::OverX);
+  auto delta_aca = p_c_u8a.delta8(test_c_u8, &p_a_u8);
+  auto delta_cab = p_c_u8b.delta8(test_c_u8, &p_c_u8a);
+  if (fabsf(delta_aca) > 0.1) { printf("%f\n", delta_aca); return 5; }
+  if (fabsf(delta_cab) > 0.1) { printf("%f\n", delta_cab); return 6; }
+
+  return 0;
+}
+
 int test_mwt_align()
 {
   return test_mwt_align_features() +
-    100*test_mwt_align_align();
+    100*test_mwt_align_align() +
+    10000*test_mwt_align_imprint();
 }
 
 #ifdef UNIT_TEST_OWNER

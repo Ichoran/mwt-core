@@ -100,14 +100,16 @@ public:
   void imprint8(Image8& frame);
 
   /** Find and adopt the best quality within `search` distance plus or minus the current position.
-    * The current position is updated to the best position.
+    * The current position is updated to the best position.  Distances and widths are rounded to
+    * a multiple of four.
     *
     * (Note: search is not exhaustive.)
     */
   void best_near(Image& frame, Point search);
 
   /** Find and adopt the best quality within `search` distance plus or minus the current position.
-    * The current position is updated to the best position.
+    * The current position is updated to the best position.  Distances and widths are rounded to
+    * a multiple of four.
     *
     * (Note: search is not exhaustive.)
     */
@@ -116,11 +118,11 @@ public:
   /** Given the profile in `probe`, find the offset between the stored profile and the probe profile. */
   float align(Profile* that);
 
-  /** Find the offset between the image in `frame` and the stored profile by computing and comparing the new profile. */
-  float delta(Image& frame);
+  /** Find the offset between the image in `frame` and the stored profile in `*that` by computing and comparing the new profile. */
+  inline float delta(Image& frame, Profile* that) { imprint(frame); return align(that); }
 
-  /** Find the offset between the 8 bit image in `frame` and the stored profile by computing and comparing the new profile. */
-  float delta8(Image8& frame);
+  /** Find the offset between the 8 bit image in `frame` and the stored profile in `*that` by computing and comparing the new profile. */
+  inline float delta8(Image8& frame, Profile* that) { imprint8(frame); return align(that); }
 };
 
 
