@@ -444,6 +444,18 @@ float Profile::align(Profile* that) {
   }
 }
 
+float Profile::quality() {
+  if (n_features < 1) return 0;
+  double q = 0.0;
+  float c = 0.5*(n-1);
+  for (int i = 0; i < n_features; i++) {
+    Feature1D& fi = features[i];
+    float centrality = 1.0 - fabsf(c - fi.position)/c;
+    q += fi.strength*((centrality > 0.5) ? 1 : (3*centrality - 0.5));
+  }
+  return q;
+}
+
 
 
 int test_mwt_align_features() {
@@ -536,7 +548,7 @@ int test_mwt_align_align() {
   three_b.n_features = 3;
   three_b.features[0] = Feature1D(11.3, 1, 5, 1);
   three_b.features[1] = Feature1D(12.21, 0.9, 5, -1);
-  three_b.features[2] = Feature1D(23.7, 0.8, 5, 1);
+  three_b.features[2] = Feature1D(19.7, 0.8, 3, 1);
   if (!(fabsf(three_a.align(&three_b) - one_a.align(&one_b)) < 0.01)) return 8;
   if (!(fabsf(three_b.align(&three_a) - one_b.align(&one_a)) < 0.01)) return 9;
 
@@ -555,9 +567,20 @@ int test_mwt_align_align() {
   five_a.features[1] = Feature1D(13.9, 0.9, 5, -1);
   five_a.features[2] = Feature1D(16.4, 0.8, 5, 1);
   five_a.features[3] = Feature1D(7.41, 0.7, 5, -1);
-  five_a.features[4] = Feature1D(2.5, 0.6, 5, 1);
+  five_a.features[4] = Feature1D(1.5, 0.6, 3, 1);
   if (!(fabsf(five_a.align(&two_b) - one_a.align(&one_b)) < 0.1)) return 10;
   if (!(fabsf(two_b.align(&five_a) + one_a.align(&one_b)) < 0.1)) return 11;
+
+  Profile zero_a(r, dir);
+  zero_a.n_features = 0;
+
+  if (five_a.quality() >= four_a.quality()) return 12;
+  if (three_a.quality() >= four_a.quality()) return 13;
+  if (three_b.quality() >= three_a.quality()) return 14;
+  if (two_a.quality() >= three_a.quality()) return 15;
+  if (one_a.quality() >= two_a.quality()) return 16;
+  if (zero_a.quality() >= one_a.quality()) return 17;
+  if (one_b.quality() != one_a.quality()) return 18;
 
   return 0;
 }
