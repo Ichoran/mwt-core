@@ -53,6 +53,7 @@ public:
   enum Collapse { OverX, OverY };
 
   float *reference;
+  float *buffer;
   float center;
   float jitter;
   int* hist;
@@ -70,6 +71,10 @@ public:
       delete[] reference; 
       reference = NULL;
     }
+    if (buffer != NULL) { 
+      delete[] buffer; 
+      buffer = NULL;
+    }
     if (hist != NULL) {
       delete[] hist;
       hist = NULL;
@@ -84,6 +89,8 @@ private:
   void compute_new_values();
 
   float sort_and_size(Feature1D *data, int k, int *ix);  // Sorts by position, returns mean diameter
+
+  void set_margins(int dist, Collapse dir, Rectangle &sub, Rectangle &add, int &absdist);
 public:
 
 
@@ -99,21 +106,37 @@ public:
   /** Adopt a profile from the given 8 bit image */
   void imprint8(Image8& frame);
 
-  /** Find and adopt the best quality within `search` distance plus or minus the current position.
-    * The current position is updated to the best position.  Distances and widths are rounded to
-    * a multiple of four.
-    *
-    * (Note: search is not exhaustive.)
-    */
-  void best_near(Image& frame, Point search);
+  /** Updates the profile to be shifted from the current position in the direction of collapse as indicated */
+  void slide(Image& frame, int distance);
 
-  /** Find and adopt the best quality within `search` distance plus or minus the current position.
+  /** Updates the profile to be shifted from the current position in the direction of collapse as indicated */
+  void slide8(Image8& frame, int distance);
+
+  /** Updates the profile to be shifted from the current position in the direction of variation as indicated */
+  void scroll(Image& frame, int distance);
+
+  /** Updates the profile to be shifted from the current position in the direction of variation as indicated */
+  void scroll8(Image8& frame, int distance);
+
+  /** Find and adopt the best quality within `search`, keeping the dimensions of the Profile.
     * The current position is updated to the best position.  Distances and widths are rounded to
     * a multiple of four.
     *
-    * (Note: search is not exhaustive.)
+    * The Profile will be imprinted on the best position when this routine is complete.
+    *
+    * (Note: the search is not exhaustive.)
     */
-  void best_near8(Image8& frame, Point search);
+  void best_near(Image& frame, Rectangle search);
+
+  /** Find and adopt the best quality within `search`, keeping the dimensions of the Profile.
+    * The current position is updated to the best position.  Distances and widths are rounded to
+    * a multiple of four.
+    *
+    * The Profile will be imprinted on the best position when this routine is complete. 
+    *
+    * (Note: the search is not exhaustive.)
+    */
+  void best_near8(Image8& frame, Rectangle search);
 
   /** Given the profile in `probe`, find the offset between the stored profile and the probe profile. */
   float align(Profile* that);

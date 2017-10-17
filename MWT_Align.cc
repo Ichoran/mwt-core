@@ -25,7 +25,7 @@
 ****************************************************************/
 
 Profile::Profile(const Rectangle src, Collapse dir) : 
-  reference(NULL), center(0), hist(NULL), n_features(0), source(src), direction(dir), lateral_factor(0.0)
+  reference(NULL), buffer(NULL), center(0), hist(NULL), n_features(0), source(src), direction(dir), lateral_factor(0.0)
 {
   n = (dir == OverX) ? source.height() : source.width();
   border = (n < 10) ? 1 : n/10;
@@ -265,6 +265,7 @@ void Profile::compute_new_values() {
   load_best_features(6);
 }
 
+
 void Profile::adopt(float *profile, int length) {
   n = (direction == OverX) ? source.height() : source.width();
   if (n > length) n = length;
@@ -457,6 +458,122 @@ float Profile::quality() {
 }
 
 
+void Profile::set_margins(int dist, Collapse dir, Rectangle &sub, Rectangle &add, int &absdist) {
+  if (dist > 0) {
+    absdist = dist;
+    if (direction == dir) {
+      add = Rectangle(source.far.x + 1, source.far.x + dist, source.near.y, source.far.y);
+      sub = Rectangle(source.near.x, source.near.x + dist - 1, source.near.y, source.far.y);
+    }
+    else {
+      add = Rectangle(source.near.x, source.far.x, source.far.y + 1, source.far.y + dist);
+      sub = Rectangle(source.near.x, source.far.x, source.near.y, source.near.y + dist - 1);
+    }
+  }
+  else {
+    absdist = -dist;
+    if (direction == dir) {
+      add = Rectangle(source.near.x + dist, source.near.x - 1, source.near.y, source.far.y);
+      sub = Rectangle(source.far.x + dist + 1, source.far.x, source.near.y, source.far.y);
+    }
+    else {
+      add = Rectangle(source.near.x, source.far.x, source.near.y + dist, source.near.y - 1);
+      sub = Rectangle(source.near.x, source.far.x, source.far.y + dist + 1, source.far.y);
+    }
+  }
+}
+
+void Profile::slide(Image &frame, int distance) {
+  if (n*0.4 <= distance || distance == 0) {
+    source += (direction == OverX) ? Point(distance, 0) : Point(0, distance);
+    imprint(frame);
+    return;
+  }
+  if (buffer == NULL) buffer = new float[n*2];
+  Rectangle add, sub;
+  int absdist;
+  set_margins(distance, OverX, sub, add, absdist);
+  if (direction==OverY) printf("%d to %d; %d to %d\n", add.near.x, add.far.x, add.near.y, add.far.y);
+
+  Rectangle safe;
+  safe = sub * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer);   else frame.meanOverY(safe, buffer);
+  safe = add * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer+n); else frame.meanOverY(safe, buffer+n);
+  float mult = absdist / (float)((direction == OverX) ? source.width() : source.height());
+  for (int i = 0; i < n; i++) reference[i] += mult*(buffer[n+i] - buffer[i]);
+  source += (direction == OverX) ? Point(distance, 0) : Point(0, distance);
+  compute_new_values();
+}
+
+void Profile::slide8(Image8 &frame, int distance) {
+  if (n*0.4 <= distance || distance == 0) {
+    source += (direction == OverX) ? Point(distance, 0) : Point(0, distance);
+    imprint8(frame);
+    return;
+  }
+  if (buffer == NULL) buffer = new float[n*2];
+  Rectangle add, sub;
+  int absdist;
+  set_margins(distance, OverX, sub, add, absdist);
+
+  Rectangle safe;
+  safe = sub * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer);   else frame.meanOverY(safe, buffer);
+  safe = add * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer+n); else frame.meanOverY(safe, buffer+n);
+  float mult = absdist / (float)((direction == OverX) ? source.width() : source.height());
+  for (int i = 0; i < n; i++) reference[i] += mult*(buffer[n+i] - buffer[i]);
+  source += (direction == OverX) ? Point(distance, 0) : Point(0, distance);
+  compute_new_values();
+}
+
+void Profile::scroll(Image &frame, int distance) {
+  if (n <= distance || distance == 0) {
+    source += (direction == OverY) ? Point(distance, 0) : Point(0, distance);
+    imprint(frame);
+    return;
+  }
+  if (buffer == NULL) buffer = new float[n*2];
+  Rectangle add, sub;
+  int absdist;
+  set_margins(distance, OverY, sub, add, absdist);
+
+  Rectangle safe;
+  safe = add * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer); else frame.meanOverY(safe, buffer);
+  if (distance > 0) {
+    memmove(reference, reference+absdist, (n-absdist)*sizeof(float));
+    memcpy(reference+n-absdist, buffer, absdist*sizeof(float));
+  }
+  else {
+    memmove(reference+absdist, reference, (n-absdist)*sizeof(float));
+    memcpy(reference, buffer, absdist*sizeof(float));
+  }
+  source += (direction == OverY) ? Point(distance, 0) : Point(0, distance);
+  compute_new_values();
+}
+
+void Profile::scroll8(Image8 &frame, int distance) {
+  if (n <= distance || distance == 0) {
+    source += (direction == OverY) ? Point(distance, 0) : Point(0, distance);
+    imprint8(frame);
+    return;
+  }
+  if (buffer == NULL) buffer = new float[n*2];
+  Rectangle add, sub;
+  int absdist;
+  set_margins(distance, OverY, sub, add, absdist);
+
+  Rectangle safe;
+  safe = add * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer); else frame.meanOverY(safe, buffer);
+  if (distance > 0) {
+    memmove(reference, reference+absdist, (n-absdist)*sizeof(float));
+    memcpy(reference+n-absdist, buffer, absdist*sizeof(float));
+  }
+  else {
+    memmove(reference+absdist, reference, (n-absdist)*sizeof(float));
+    memcpy(reference, buffer, absdist*sizeof(float));
+  }
+  source += (direction == OverY) ? Point(distance, 0) : Point(0, distance);
+  compute_new_values();
+}
+
 
 
 int test_mwt_align_features() {
@@ -615,8 +732,8 @@ int test_mwt_align_imprint() {
     }
   }
 
-  Image full_i16(data_i16, Point(16, 20), false);
-  Image8 full_u8(data_u8, Point(16, 20), false);
+  Image full_i16(data_i16, Point(16, 20), false); full_i16.owns_pixels = true;
+  Image8 full_u8(data_u8, Point(16, 20), false); full_u8.owns_pixels = true;
 
   Image test_a_i16(full_i16, Rectangle(2, 13, 0, 11), false);
   Image8 test_a_u8(full_u8, Rectangle(2, 13, 0, 11), false);
@@ -645,11 +762,140 @@ int test_mwt_align_imprint() {
   return 0;
 }
 
+int test_mwt_align_slide() {
+  char data[16][21] = {
+   /*01234567891123456789*/
+    "        PPPPPPPPPPPP",
+    "        PPPPPPPPPPPP",
+    "        PPPPPPPPPPPP",
+    "        PPPPPPPPPPPP",
+    "        XXXXXXXXXXXX",
+    "        XXXXXXXXXXXX",
+    "        XXXXXXXXXXXX",
+    "        XXXXXXXXXXXX",
+    "        XXXXXXXXXXXX",
+    "        XXXXXXXXXXXX",
+    "        XXXXXXXXXXXX",
+    "        XXXXXXXXXXXX",
+    "                    ",
+    "                    ",
+    "                    ",
+    "                    "
+  };
+  short *data_i16 = new short[20*16*sizeof(short)];
+  uint8_t *data_u8 = new uint8_t[20*16*sizeof(uint8_t)];
+  for (int i = 0; i < 16; i++) {
+    for (int j = 0; j < 20; j++) {
+      data_i16[i*20+j] = (short)data[i][j];
+      data_u8[i*20+j] = (uint8_t)data[i][j];
+    }
+  }
+  Image full_i16(data_i16, Point(16, 20), false); full_i16.owns_pixels = true;
+  Image8 full_u8(data_u8, Point(16, 20), false); full_u8.owns_pixels = true;
+
+  char center[]  = "    XXXXXXXX";
+  char up_2[]    = "    VVVVVVVV";
+  char down_2[]  = "    JJJJJJJJ";
+  char left_2[]  = "      XXXXXX";
+  char right_2[] = "  XXXXXXXXXX";
+  char u1_r2[]   = "  WWWWWWWWWW";
+
+  Profile p16(Rectangle(4, 11, 4, 15), Profile::OverX);
+  p16.imprint(full_i16);    for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - center[i])  > 0.15) return 1;
+  p16.slide(full_i16, -2);  for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - up_2[i])    > 0.15) return 2;
+  p16.slide(full_i16, 2);   for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - center[i])  > 0.15) return 3;
+  p16.slide(full_i16, 2);   for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - down_2[i])  > 0.15) return 4;
+  p16.slide(full_i16, -2);  for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - center[i])  > 0.15) return 5;
+  p16.scroll(full_i16, -2); for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - left_2[i])  > 0.15) return 6;
+  p16.scroll(full_i16, 2);  for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - center[i])  > 0.15) return 7;
+  p16.scroll(full_i16, 2);  for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - right_2[i]) > 0.15) return 8;
+  p16.slide(full_i16, -1);  for (int i=0; i<p16.n; i++) if (fabsf(p16.reference[i] - u1_r2[i])   > 0.15) return 9;
+
+  Profile p8(Rectangle(4, 11, 4, 15), Profile::OverX);
+  p8.imprint8(full_u8);    for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - center[i])  > 0.15) return 11;
+  p8.slide8(full_u8, -2);  for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - up_2[i])    > 0.15) return 12;
+  p8.slide8(full_u8, 2);   for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - center[i])  > 0.15) return 13;
+  p8.slide8(full_u8, 2);   for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - down_2[i])  > 0.15) return 14;
+  p8.slide8(full_u8, -2);  for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - center[i])  > 0.15) return 15;
+  p8.scroll8(full_u8, -2); for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - left_2[i])  > 0.15) return 16;
+  p8.scroll8(full_u8, 2);  for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - center[i])  > 0.15) return 17;
+  p8.scroll8(full_u8, 2);  for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - right_2[i]) > 0.15) return 18;
+  p8.slide8(full_u8, -1);  for (int i=0; i<p8.n; i++) if (fabsf(p8.reference[i] - u1_r2[i])   > 0.15) return 19;
+
+  char kenter[] = "JJJJJJJJ  ";
+  char vp_2[]   = "DDJJJJJJJJ";
+  char town_2[] = "JJJJJJ    ";
+  char rite_2[] = "XXXXXXXX  ";
+  char meft_2[] = "<<<<<<<<  ";
+  char v2_m2[]  = "88<<<<<<<<";
+
+  Profile q16(Rectangle(4, 13, 6, 13), Profile::OverY);
+  q16.imprint(full_i16);    for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - kenter[i])  > 0.15) return 21;
+  q16.scroll(full_i16, -2); for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - vp_2[i])    > 0.15) return 22;
+  q16.scroll(full_i16, 2);  for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - kenter[i])  > 0.15) return 23;
+  q16.scroll(full_i16, 2);  for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - town_2[i])  > 0.15) return 24;
+  q16.scroll(full_i16, -2); for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - kenter[i])  > 0.15) return 25;
+  q16.slide(full_i16, 2);   for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - rite_2[i])  > 0.15) return 26;
+  q16.slide(full_i16, -2);  for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - kenter[i])  > 0.15) return 27;
+  q16.slide(full_i16, -2);  for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - meft_2[i])  > 0.15) return 28;
+  q16.scroll(full_i16, -2); for (int i=0; i<q16.n; i++) if (fabsf(q16.reference[i] - v2_m2[i])   > 0.15) return 29;
+
+  Profile q8(Rectangle(4, 13, 6, 13), Profile::OverY);
+  q8.imprint8(full_u8);    for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - kenter[i])  > 0.15) return 31;
+  q8.scroll8(full_u8, -2); for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - vp_2[i])    > 0.15) return 32;
+  q8.scroll8(full_u8, 2);  for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - kenter[i])  > 0.15) return 33;
+  q8.scroll8(full_u8, 2);  for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - town_2[i])  > 0.15) return 34;
+  q8.scroll8(full_u8, -2); for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - kenter[i])  > 0.15) return 35;
+  q8.slide8(full_u8, 2);   for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - rite_2[i])  > 0.15) return 36;
+  q8.slide8(full_u8, -2);  for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - kenter[i])  > 0.15) return 37;
+  q8.slide8(full_u8, -2);  for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - meft_2[i])  > 0.15) return 38;
+  q8.scroll8(full_u8, -2); for (int i=0; i<q8.n; i++) if (fabsf(q8.reference[i] - v2_m2[i])   > 0.15) return 39;
+
+  return 0;
+}
+
+int test_mwt_align_best() {
+  char data[16][21] = {
+   /*01234567891123456789*/
+    "   !AWYZYWSYZYWZzjzj",
+    "    !AXZXWYWXYWXZzjj",
+    "     @NZWYZYWYZWYZzs",
+    "       @NZYWWYZWYWZx",
+    "       !AWYZYWSYZYWZ",
+    "       !AXZXWYWXYWXZ",
+    "       @NZWYZYWYZWYZ",
+    "        @NZYWWYZWYWZ",
+    "       !AWYZYWSYZYWZ",
+    "       !AXZXWYWXYWXZ",
+    "       @NZWYZYWYZWYZ",
+    "        @NZYWWYZWYWZ",
+    "       !AWYZYWSYZYWZ",
+    "         !AXZXWYWXYW",
+    "          @NZWYZYWYZ",
+    "            @NZYWWYZ"
+  };
+  short *data_i16 = new short[20*16*sizeof(short)];
+  uint8_t *data_u8 = new uint8_t[20*16*sizeof(uint8_t)];
+  for (int i = 0; i < 16; i++) {
+    for (int j = 0; j < 20; j++) {
+      data_i16[i*20+j] = (short)data[i][j] * 64;
+      data_u8[i*20+j] = (uint8_t)data[i][j];
+    }
+  }
+
+  Image full_i16(data_i16, Point(16, 20), false); full_i16.owns_pixels = true;
+  Image8 full_u8(data_u8, Point(16, 20), false); full_u8.owns_pixels = true;
+
+  return 0;
+}
+
 int test_mwt_align()
 {
   return test_mwt_align_features() +
     100*test_mwt_align_align() +
-    10000*test_mwt_align_imprint();
+    10000*test_mwt_align_imprint() +
+    1000000*test_mwt_align_slide() +
+    100000000*test_mwt_align_best();
 }
 
 #ifdef UNIT_TEST_OWNER
