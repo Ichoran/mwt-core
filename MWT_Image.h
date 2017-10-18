@@ -625,6 +625,8 @@ public:
   void minOverY(Rectangle target, short *output);
   void meanOverX(Rectangle target, float* output);
   void meanOverY(Rectangle target, float* output);
+  void meanSqOverX(Rectangle target, float* output);
+  void meanSqOverY(Rectangle target, float* output);
   void deviationOverX(Rectangle target, const float* means, float* output);
   void deviationOverY(Rectangle target, const float* means, float* output);
 
@@ -819,6 +821,8 @@ public:
   void minOverY(Rectangle target, uint8_t *output);
   void meanOverX(Rectangle target, float* output);
   void meanOverY(Rectangle target, float* output);
+  void meanSqOverX(Rectangle target, float* output);
+  void meanSqOverY(Rectangle target, float* output);
   void deviationOverX(Rectangle target, const float* means, float* output);
   void deviationOverY(Rectangle target, const float* means, float* output);
 

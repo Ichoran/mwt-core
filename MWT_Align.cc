@@ -25,7 +25,7 @@
 ****************************************************************/
 
 Profile::Profile(const Rectangle src, Collapse dir) : 
-  reference(NULL), buffer(NULL), center(0), hist(NULL), n_features(0), source(src), direction(dir), lateral_factor(0.0)
+  reference(NULL), squareref(NULL), buffer(NULL), center(0), hist(NULL), n_features(0), source(src), direction(dir), lateral_factor(0.0)
 {
   n = (dir == OverX) ? source.height() : source.width();
   border = (n < 10) ? 1 : n/10;
@@ -278,10 +278,12 @@ void Profile::imprint(Image& frame) {
   if (direction == OverX) {
     n = safe.height();
     frame.meanOverX(safe, reference);
+    if (squareref != NULL) frame.meanSqOverX(safe, squareref);
   }
   else {
     n = safe.width();
     frame.meanOverY(safe, reference);
+    if (squareref != NULL) frame.meanSqOverY(safe, squareref);
   }
   compute_new_values();
 }
@@ -291,10 +293,12 @@ void Profile::imprint8(Image8& frame) {
   if (direction == OverX) {
     n = safe.height();
     frame.meanOverX(safe, reference);
+    if (squareref != NULL) frame.meanSqOverX(safe, squareref);
   }
   else {
     n = safe.width();
     frame.meanOverY(safe, reference);
+    if (squareref != NULL) frame.meanSqOverY(safe, squareref);
   }
   compute_new_values();
 }
@@ -452,7 +456,19 @@ float Profile::quality() {
   for (int i = 0; i < n_features; i++) {
     Feature1D& fi = features[i];
     float centrality = 1.0 - fabsf(c - fi.position)/c;
-    q += fi.strength*((centrality > 0.5) ? 1 : (3*centrality - 0.5));
+    float strength = fi.strength;
+    if (squareref != NULL) {
+      int j0 = (int)floor(fi.position - fi.diameter); if (j0 < 0)  j0 = 0;
+      int j1 = (int) ceil(fi.position + fi.diameter); if (j1 >= n) j1 = n-1;
+      float svar = 0.0;
+      for (int j = j0; j <= j1; j++) svar += squareref[j] - reference[j]*reference[j];
+      svar /= 1 + j1 - j0;
+      if (svar > 0 && svar*6 > fi.strength) {
+        if (svar > strength) fi.strength *= 0.25;
+        else fi.strength *= 0.25 + (fi.strength/svar - 1)*0.15;
+      }
+    }
+    q += strength*((centrality > 0.5) ? 1 : (3*centrality - 0.5));
   }
   return q;
 }
@@ -494,12 +510,20 @@ void Profile::slide(Image &frame, int distance) {
   int absdist;
   set_margins(distance, OverX, sub, add, absdist);
   if (direction==OverY) printf("%d to %d; %d to %d\n", add.near.x, add.far.x, add.near.y, add.far.y);
-
-  Rectangle safe;
-  safe = sub * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer);   else frame.meanOverY(safe, buffer);
-  safe = add * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer+n); else frame.meanOverY(safe, buffer+n);
+  sub = sub * frame.getBounds();
+  add = add * frame.getBounds();
   float mult = absdist / (float)((direction == OverX) ? source.width() : source.height());
+
+  if (direction == OverX) frame.meanOverX(sub, buffer);   else frame.meanOverY(sub, buffer);
+  if (direction == OverX) frame.meanOverX(add, buffer+n); else frame.meanOverY(add, buffer+n);
   for (int i = 0; i < n; i++) reference[i] += mult*(buffer[n+i] - buffer[i]);
+
+  if (squareref != NULL) {
+    if (direction == OverX) frame.meanSqOverX(sub, buffer);   else frame.meanSqOverY(sub, buffer);
+    if (direction == OverX) frame.meanSqOverX(add, buffer+n); else frame.meanSqOverY(add, buffer+n);
+    for (int i = 0; i < n; i++) squareref[i] += mult*(buffer[n+i] - buffer[i]);
+  }
+
   source += (direction == OverX) ? Point(distance, 0) : Point(0, distance);
   compute_new_values();
 }
@@ -514,12 +538,20 @@ void Profile::slide8(Image8 &frame, int distance) {
   Rectangle add, sub;
   int absdist;
   set_margins(distance, OverX, sub, add, absdist);
-
-  Rectangle safe;
-  safe = sub * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer);   else frame.meanOverY(safe, buffer);
-  safe = add * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer+n); else frame.meanOverY(safe, buffer+n);
+  sub = sub * frame.getBounds();
+  add = add * frame.getBounds();
   float mult = absdist / (float)((direction == OverX) ? source.width() : source.height());
+
+  if (direction == OverX) frame.meanOverX(sub, buffer);   else frame.meanOverY(sub, buffer);
+  if (direction == OverX) frame.meanOverX(add, buffer+n); else frame.meanOverY(add, buffer+n);
   for (int i = 0; i < n; i++) reference[i] += mult*(buffer[n+i] - buffer[i]);
+
+  if (squareref != NULL) {
+    if (direction == OverX) frame.meanSqOverX(sub, buffer);   else frame.meanSqOverY(sub, buffer);
+    if (direction == OverX) frame.meanSqOverX(add, buffer+n); else frame.meanSqOverY(add, buffer+n);
+    for (int i = 0; i < n; i++) squareref[i] += mult*(buffer[n+i] - buffer[i]);
+  }
+
   source += (direction == OverX) ? Point(distance, 0) : Point(0, distance);
   compute_new_values();
 }
@@ -534,9 +566,9 @@ void Profile::scroll(Image &frame, int distance) {
   Rectangle add, sub;
   int absdist;
   set_margins(distance, OverY, sub, add, absdist);
+  add = add * frame.getBounds();
 
-  Rectangle safe;
-  safe = add * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer); else frame.meanOverY(safe, buffer);
+  if (direction == OverX) frame.meanOverX(add, buffer); else frame.meanOverY(add, buffer);
   if (distance > 0) {
     memmove(reference, reference+absdist, (n-absdist)*sizeof(float));
     memcpy(reference+n-absdist, buffer, absdist*sizeof(float));
@@ -545,6 +577,19 @@ void Profile::scroll(Image &frame, int distance) {
     memmove(reference+absdist, reference, (n-absdist)*sizeof(float));
     memcpy(reference, buffer, absdist*sizeof(float));
   }
+
+  if (squareref != NULL) {
+    if (direction == OverX) frame.meanSqOverX(add, buffer); else frame.meanSqOverY(add, buffer);
+    if (distance > 0) {
+      memmove(squareref, squareref+absdist, (n-absdist)*sizeof(float));
+      memcpy(squareref+n-absdist, buffer, absdist*sizeof(float));
+    }
+    else {
+      memmove(squareref+absdist, squareref, (n-absdist)*sizeof(float));
+      memcpy(squareref, buffer, absdist*sizeof(float));
+    }
+  }
+
   source += (direction == OverY) ? Point(distance, 0) : Point(0, distance);
   compute_new_values();
 }
@@ -559,9 +604,9 @@ void Profile::scroll8(Image8 &frame, int distance) {
   Rectangle add, sub;
   int absdist;
   set_margins(distance, OverY, sub, add, absdist);
+  add = add * frame.getBounds();
 
-  Rectangle safe;
-  safe = add * frame.getBounds(); if (direction == OverX) frame.meanOverX(safe, buffer); else frame.meanOverY(safe, buffer);
+  if (direction == OverX) frame.meanOverX(add, buffer); else frame.meanOverY(add, buffer);
   if (distance > 0) {
     memmove(reference, reference+absdist, (n-absdist)*sizeof(float));
     memcpy(reference+n-absdist, buffer, absdist*sizeof(float));
@@ -570,10 +615,83 @@ void Profile::scroll8(Image8 &frame, int distance) {
     memmove(reference+absdist, reference, (n-absdist)*sizeof(float));
     memcpy(reference, buffer, absdist*sizeof(float));
   }
+
+  if (squareref != NULL) {
+    if (direction == OverX) frame.meanSqOverX(add, buffer); else frame.meanSqOverY(add, buffer);
+    if (distance > 0) {
+      memmove(squareref, squareref+absdist, (n-absdist)*sizeof(float));
+      memcpy(squareref+n-absdist, buffer, absdist*sizeof(float));
+    }
+    else {
+      memmove(squareref+absdist, squareref, (n-absdist)*sizeof(float));
+      memcpy(squareref, buffer, absdist*sizeof(float));
+    }
+  }
+
   source += (direction == OverY) ? Point(distance, 0) : Point(0, distance);
   compute_new_values();
 }
 
+
+Rectangle Profile::constrain_source(Rectangle frameBounds, Rectangle regionBounds) {
+  Rectangle actual = frameBounds * regionBounds;
+  if (actual.width() < source.width()) {
+    source.near.x = actual.near.x;
+    source.far.x  = actual.far.x;
+  }
+  if (actual.height() < source.height()) {
+    source.near.y = actual.near.y;
+    source.far.y  = actual.far.y;
+  }
+  if (actual.near.x > source.near.x)    source += Point(actual.near.x - source.near.x, 0);
+  else if (actual.far.x < source.far.x) source -= Point(source.far.x - actual.far.x, 0);
+  if (actual.near.y > source.near.y)    source += Point(0, actual.near.y - source.near.y);
+  else if (actual.far.y < source.far.y) source -= Point(0, source.far.y - actual.far.y);
+  int m = (direction == OverX) ? source.height() : source.width();
+  if (m != n) {
+    if (n > m) {
+      if (reference != NULL) { delete[] reference; reference = new float[m]; }
+      if (squareref != NULL) { delete[] squareref; squareref = new float[m]; }
+      if (buffer != NULL) { delete[] buffer; buffer = new float[2*m]; }
+    }
+    n = m;
+  }
+  return actual;
+}
+
+void Profile::constrain_bounds_nearby(Rectangle &bounds) {
+  if (bounds.near.x < source.near.x - source.width())  bounds.near.x = source.near.x - source.width();
+  if (bounds.near.y < source.near.y - source.height()) bounds.near.y = source.near.y - source.height();
+  if (bounds.far.x > source.far.x + source.width())  bounds.far.x = source.far.x + source.width();
+  if (bounds.far.y > source.far.y + source.height()) bounds.far.y = source.far.y + source.height();  
+}
+
+
+/*
+void Profile::best_near(Image &frame, Rectangle search) {
+  Rectangle bounds = constrain_source(frame.getBounds(), search);
+  if (
+    bounds.width() >= source.width() &&
+    bounds.height() >= source.height() &&
+    (bounds.width()/source.width())*(bounds.height()/source.height()) > 3
+  ) {
+    best_tile_near(frame, bounds);
+    constrain_bounds_nearby(bounds);
+  }
+  int xlo = bounds.near.x - source.near.x;
+  int xhi = bounds.far.x - source.far.x;
+  int ylo = bounds.near.y - source.near.y;
+  int yhi = bounds.far.y - source.far.y;
+  int xbest = 0;
+  int ybest = 0;
+  float qbest = 0.0;
+  if (squareref != NULL) squareref = new float[n];
+  if (direction == OverX) {
+
+    imprint(frame);
+  }
+}
+*/
 
 
 int test_mwt_align_features() {

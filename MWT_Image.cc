@@ -3356,6 +3356,62 @@ void Image::meanOverY(Rectangle target, float* output) {
 #endif
 }
 
+// Finds the mean square value for each Y averaged over all of X in the rectangle
+void Image::meanSqOverX(Rectangle target, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int y = safe.near.y; y <= safe.far.y; y += 4) {
+      __m128 sum4 = _mm_cvtpi16_ps(*(__m64*)(&rare(safe.near.x, y)));
+      sum4 = _mm_mul_ps(sum4, sum4);
+      for (int x = safe.near.x+1; x <= safe.far.x; x++) {
+        __m128 next4 = _mm_cvtpi16_ps(*(__m64*)(&rare(x, y)));
+        sum4 = _mm_add_ps(sum4, _mm_mul_ps(next4, next4));
+      }
+      sum4 = _mm_div_ps(sum4, _mm_set_ps1(safe.width() < 1 ? 1 : safe.width()));
+      *(__m128*)(output + (y-safe.near.y)) = sum4;
+    }  
+  }
+  else {
+#endif
+    for (int y = safe.near.y; y <= safe.far.y; y++) {
+      double sum = 0;
+      for (int x = safe.near.x; x <= safe.far.x; x++) { int v = get(x, y); sum += v*v; }
+      output[y - safe.near.y] = (float)(sum / safe.width());
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the mean square value for each X averaged over all of Y in the rectangle
+void Image::meanSqOverY(Rectangle target, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      __m128 accum = _mm_cvtpi16_ps(*(__m64*)(&rare(x, safe.near.y)));
+      accum = _mm_mul_ps(accum, accum);
+      for (int y = safe.near.y+4; y <= safe.far.y; y += 4) {
+        __m128 data4 = _mm_cvtpi16_ps(*(__m64*)(&rare(x, y)));
+        accum = _mm_add_ps(accum, _mm_mul_ps(data4, data4));
+      }
+      float sum = ((float*)(&accum))[0] + ((float*)(&accum))[1] + ((float*)(&accum))[2] + ((float*)(&accum))[3];
+      output[x - safe.near.x] = sum / safe.height();
+    }
+  }
+  else {
+#endif
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      double sum = 0;
+      for (int y = safe.near.y; y <= safe.far.y; y++) { int v = get(x, y); sum += v*v; }
+      output[x - safe.near.x] = (float)(sum / safe.height());
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
 // Finds the standard deviation for each Y across all X in the rectangle, given the means
 void Image::deviationOverX(Rectangle target, const float* means, float* output) {
   Rectangle safe = target * getBounds();
@@ -4329,6 +4385,62 @@ void Image8::meanOverY(Rectangle target, float* output) {
 #endif
 }
 
+// Finds the mean square value for each Y averaged over all of X in the rectangle
+void Image8::meanSqOverX(Rectangle target, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int y = safe.near.y; y <= safe.far.y; y += 4) {
+      __m128 sum4 = _mm_set_ps1(0.0);
+      for (int x = safe.near.x; x <= safe.far.x; x++) {
+        uint8_t *p = &rare(x, y);
+        __m128 next4 = _mm_cvtpi16_ps(_mm_set_pi16((short)p[3], (short)p[2], (short)p[1], (short)p[0]));
+        sum4 = _mm_add_ps(sum4, _mm_mul_ps(next4, next4));
+      }
+      sum4 = _mm_div_ps(sum4, _mm_set_ps1(safe.width() < 1 ? 1 : safe.width()));
+      *(__m128*)(output + (y-safe.near.y)) = sum4;
+    }  
+  }
+  else {
+#endif
+    for (int y = safe.near.y; y <= safe.far.y; y++) {
+      double sum = 0;
+      for (int x = safe.near.x; x <= safe.far.x; x++) { int v = get(x, y); sum += v*v; }
+      output[y - safe.near.y] = (float)(sum / safe.width());
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
+// Finds the mean square value for each X averaged over all of Y in the rectangle
+void Image8::meanSqOverY(Rectangle target, float* output) {
+  Rectangle safe = target * getBounds();
+#ifdef ENABLE_SIMD
+  if (safe.height() % 4 == 0 && bin <= 1) {
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      __m128 accum = _mm_set_ps1(0.0);
+      for (int y = safe.near.y; y <= safe.far.y; y += 4) {
+        uint8_t *p = &rare(x, y);
+        __m128 data4 = _mm_cvtpi16_ps(_mm_set_pi16((short)p[3], (short)p[2], (short)p[1], (short)p[0]));
+        accum = _mm_add_ps(accum, _mm_mul_ps(data4, data4));
+      }
+      float sum = ((float*)(&accum))[0] + ((float*)(&accum))[1] + ((float*)(&accum))[2] + ((float*)(&accum))[3];
+      output[x - safe.near.x] = sum / safe.height();
+    }
+  }
+  else {
+#endif
+    for (int x = safe.near.x; x <= safe.far.x; x++) {
+      double sum = 0;
+      for (int y = safe.near.y; y <= safe.far.y; y++) { int v = get(x, y); sum += v*v; }
+      output[x - safe.near.x] = (float)(sum / safe.height());
+    }
+#ifdef ENABLE_SIMD
+  }
+#endif
+}
+
 // Finds the standard deviation for each Y across all X in the rectangle, given the means
 void Image8::deviationOverX(Rectangle target, const float* means, float* output) {
   Rectangle safe = target * getBounds();
@@ -4978,6 +5090,8 @@ int test_mwt_image_flattening() {
   short test_image_min_x[] = {0x00, 0x00, 0x00, 0x00, 0x80, 0x80, 0x80, 0xA0};
   float test_image_mean_y[] = {68, 95.75, 127.75, 129.75, 131.75, 149.625, 151.625, 153.625, 171.5, 173.5, 175.5, 193.375};
   float test_image_mean_x[] = {1.333333, 58.666668, 117.25, 149, 202.083328, 128, 244.416672, 247.083328};
+  float test_image_meansq_y[] = {9344.0, 20352.25, 24448.25, 24480.25, 24576.25, 30816.375, 31040.375, 31328.375, 37760.5, 38176.5, 38656.5, 44768.625};
+  float test_image_meansq_x[] = {21.3333, 5717.3333, 17706.75, 29867.0, 44757.9167, 16384.0, 60971.5833, 61739.583};
   float test_image_sd_y[] = {73.4458, 113.0572, 96.3813, 93.4738, 90.826, 98.147, 95.918, 93.9771, 97.6773, 96.061, 94.7553, 91.8056};
   float test_image_sd_x[] = {4.6188, 49.8239, 65.72, 91.4489, 65.3959, 0, 36.6617, 27.4241};
 
@@ -4985,6 +5099,8 @@ int test_mwt_image_flattening() {
   short result_short_x[8];
   float result_float_y[12];
   float result_float_x[8];
+  float result2_float_y[12];
+  float result2_float_x[8];
 
   Image im(test_image, Point(test_image_width, test_image_height), false);
 
@@ -5024,16 +5140,38 @@ int test_mwt_image_flattening() {
     return 6;
   }
 
+  im.meanSqOverY(Rectangle(0, test_image_width, 0, test_image_height), result2_float_y);
+  if (!test_same_floats(result2_float_y, test_image_meansq_y, test_image_width)) {
+    test_print_floats(result2_float_y, test_image_meansq_y, test_image_width);
+    return 7;
+  }
+  for (int i = 0; i < 12; i++) result2_float_y[i] = (float)(sqrt((8.0/7)*(result2_float_y[i] - result_float_y[i]*result_float_y[i])));
+
+  im.meanSqOverX(Rectangle(0, test_image_width, 0, test_image_height), result2_float_x);
+  if (!test_same_floats(result2_float_x, test_image_meansq_x, test_image_height)) {
+    test_print_floats(result2_float_x, test_image_meansq_x, test_image_height);
+    return 8;
+  }
+  for (int i = 0; i < 8; i++) result2_float_x[i] = (float)(sqrt((12.0/11)*(result2_float_x[i] - result_float_x[i]*result_float_x[i])));
+
   im.deviationOverY(Rectangle(0, test_image_width, 0, test_image_height), test_image_mean_y, result_float_y);
   if (!test_same_floats(result_float_y, test_image_sd_y, test_image_width)) {
     test_print_floats(result_float_y, test_image_sd_y, test_image_width);
-    return 7;
+    return 9;
+  }
+  if (!test_same_floats(result_float_y, result2_float_y, test_image_width)) {
+    test_print_floats(result_float_y, result2_float_y, test_image_width);
+    return 10;
   }
 
   im.deviationOverX(Rectangle(0, test_image_width, 0, test_image_height), test_image_mean_x, result_float_x);
   if (!test_same_floats(result_float_x, test_image_sd_x, test_image_height)) {
     test_print_floats(result_float_x, test_image_sd_x, test_image_height);
-    return 8;
+    return 11;
+  }
+  if (!test_same_floats(result_float_x, result2_float_x, test_image_height)) {
+    test_print_floats(result_float_x, result2_float_x, test_image_height);
+    return 12;
   }
 
   uint8_t test_image8[] = {
@@ -5062,49 +5200,71 @@ int test_mwt_image_flattening() {
   im8.maxOverY(Rectangle(0, test_image_width, 0, test_image_height), result_byte_y);
   if (!test_same_bytes(result_byte_y, test_image8_max_y, test_image_width)) {
     test_print_bytes(result_byte_y, test_image8_max_y, test_image_width);
-    return 11;
+    return 13;
   }
 
   im8.maxOverX(Rectangle(0, test_image_width, 0, test_image_height), result_byte_x);
   if (!test_same_bytes(result_byte_x, test_image8_max_x, test_image_height)) {
     test_print_bytes(result_byte_x, test_image8_max_x, test_image_height);
-    return 12;
+    return 14;
   }
 
   im8.minOverY(Rectangle(0, test_image_width, 0, test_image_height), result_byte_y);
   if (!test_same_bytes(result_byte_y, test_image8_min_y, test_image_width)) {
     test_print_bytes(result_byte_y, test_image8_min_y, test_image_width);
-    return 13;
+    return 15;
   }
 
   im8.minOverX(Rectangle(0, test_image_width, 0, test_image_height), result_byte_x);
   if (!test_same_bytes(result_byte_x, test_image8_min_x, test_image_height)) {
     test_print_bytes(result_byte_x, test_image8_min_x, test_image_height);
-    return 14;
+    return 16;
   }
 
   im8.meanOverY(Rectangle(0, test_image_width, 0, test_image_height), result_float_y);
   if (!test_same_floats(result_float_y, test_image_mean_y, test_image_width)) {
     test_print_floats(result_float_y, test_image_mean_y, test_image_width);
-    return 15;
+    return 17;
   }
 
   im8.meanOverX(Rectangle(0, test_image_width, 0, test_image_height), result_float_x);
   if (!test_same_floats(result_float_x, test_image_mean_x, test_image_height)) {
     test_print_floats(result_float_x, test_image_mean_x, test_image_height);
-    return 16;
+    return 18;
   }
+
+  im8.meanSqOverY(Rectangle(0, test_image_width, 0, test_image_height), result2_float_y);
+  if (!test_same_floats(result2_float_y, test_image_meansq_y, test_image_width)) {
+    test_print_floats(result2_float_y, test_image_meansq_y, test_image_width);
+    return 19;
+  }
+  for (int i = 0; i < 12; i++) result2_float_y[i] = (float)(sqrt((8.0/7)*(result2_float_y[i] - result_float_y[i]*result_float_y[i])));
+
+  im8.meanSqOverX(Rectangle(0, test_image_width, 0, test_image_height), result2_float_x);
+  if (!test_same_floats(result2_float_x, test_image_meansq_x, test_image_height)) {
+    test_print_floats(result2_float_x, test_image_meansq_x, test_image_height);
+    return 20;
+  }
+  for (int i = 0; i < 8; i++) result2_float_x[i] = (float)(sqrt((12.0/11)*(result2_float_x[i] - result_float_x[i]*result_float_x[i])));
 
   im8.deviationOverY(Rectangle(0, test_image_width, 0, test_image_height), test_image_mean_y, result_float_y);
   if (!test_same_floats(result_float_y, test_image_sd_y, test_image_width)) {
     test_print_floats(result_float_y, test_image_sd_y, test_image_width);
-    return 17;
+    return 21;
+  }
+  if (!test_same_floats(result_float_y, result2_float_y, test_image_width)) {
+    test_print_floats(result_float_y, result2_float_y, test_image_width);
+    return 22;
   }
 
   im8.deviationOverX(Rectangle(0, test_image_width, 0, test_image_height), test_image_mean_x, result_float_x);
   if (!test_same_floats(result_float_x, test_image_sd_x, test_image_height)) {
     test_print_floats(result_float_x, test_image_sd_x, test_image_height);
-    return 18;
+    return 23;
+  }
+  if (!test_same_floats(result_float_x, result2_float_x, test_image_height)) {
+    test_print_floats(result_float_x, result2_float_x, test_image_height);
+    return 24;
   }
 
   return 0;

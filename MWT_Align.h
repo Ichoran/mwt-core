@@ -53,6 +53,7 @@ public:
   enum Collapse { OverX, OverY };
 
   float *reference;
+  float *squareref;
   float *buffer;
   float center;
   float jitter;
@@ -70,6 +71,10 @@ public:
     if (reference != NULL) { 
       delete[] reference; 
       reference = NULL;
+    }
+    if (squareref != NULL) {
+      delete[] squareref;
+      squareref = NULL;
     }
     if (buffer != NULL) { 
       delete[] buffer; 
@@ -91,6 +96,8 @@ private:
   float sort_and_size(Feature1D *data, int k, int *ix);  // Sorts by position, returns mean diameter
 
   void set_margins(int dist, Collapse dir, Rectangle &sub, Rectangle &add, int &absdist);
+  Rectangle constrain_source(Rectangle frameBounds, Rectangle regionBounds);
+  void constrain_bounds_nearby(Rectangle &bounds);
 public:
 
 
