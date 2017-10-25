@@ -62,7 +62,8 @@ ShiftWeight Profile::histify(float *values, int count) {
   float shift = lo-0.0005;
   for (int i = 0; i < count ; i++) {
     float x = (values[i] - shift)*scale;
-    hist[(int)floor(x)]++;
+    if (x < 0) x = 0;
+    hist[0x3F & (int)floor(x)]++;
   }
   return ShiftWeight(lo, delta);
 }
@@ -465,7 +466,7 @@ float Profile::quality() {
       svar /= 1 + j1 - j0;
       if (svar > 0 && svar*6 > fi.strength) {
         if (svar > strength) fi.strength *= 0.25;
-        else fi.strength *= 0.25 + (fi.strength/svar - 1)*0.15;
+        else strength *= 0.25 + (fi.strength/svar - 1)*0.15;
       }
     }
     q += strength*((centrality > 0.5) ? 1 : (3*centrality - 0.5));
@@ -659,11 +660,70 @@ Rectangle Profile::constrain_source(Rectangle frameBounds, Rectangle regionBound
   return actual;
 }
 
+float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
+  bool dealloc = false;
+  if (squareref == NULL) {
+    squareref = new float[n];
+    dealloc = true
+;  }
+  auto x0 = bounds.near.x; if ((x0 & 0x3) != 0) x0 += 4 - (x0 & 0x3);
+  auto y0 = bounds.near.y; if ((y0 & 0x3) != 0) y0 += 4 - (y0 & 0x3);
+  source += Point(x0, y0) - source.near;
+  bool no_x = source.far.x > bounds.far.x;
+  bool no_y = source.far.y > bounds.far.y;
+  if (no_x) source += Point(bounds.near.x - x0, 0);
+  if (no_y) source += Point(0, bounds.near.y - y0);
+  auto corner = source.near;
+  auto best_p = source.near;
+  float best_q = 0;
+  auto halfdelta = (source.size() / 8); halfdelta *= 4;
+  if (halfdelta.x <= 1) halfdelta.x = 2;
+  if (halfdelta.y <= 1) halfdelta.y = 2;
+  auto delta = halfdelta * 2;
+  for (auto c = corner; source.nearTo(c), source.far.x <= bounds.far.x; c.x += delta.x) {
+    for (c.y = corner.y; source.nearTo(c), source.far.y <= bounds.far.y; c.y += delta.y) {
+      imprint(frame);
+      auto q = quality();
+      if (q > best_q) {
+        best_p = source.near;
+        best_q = q;
+      }
+    }
+    auto cc = Point(c.x, corner.y);
+    cc += halfdelta;
+    if (cc.x + source.width() <= bounds.far.x && cc.y + source.height() <= bounds.far.y) {
+      for (; source.nearTo(cc), source.far.y <= bounds.far.y; cc.y += delta.y) {
+        imprint(frame);
+        auto q = quality();
+        if (q > best_q) {
+          best_p = source.near;
+          best_q = q;
+        }
+      }
+    }
+  }
+  source.nearTo(best_p);
+  imprint(frame);
+  if (dealloc) {
+    delete[](squareref);
+    squareref = NULL;
+  }
+  return best_q;
+}
+
+
 void Profile::constrain_bounds_nearby(Rectangle &bounds) {
-  if (bounds.near.x < source.near.x - source.width())  bounds.near.x = source.near.x - source.width();
-  if (bounds.near.y < source.near.y - source.height()) bounds.near.y = source.near.y - source.height();
-  if (bounds.far.x > source.far.x + source.width())  bounds.far.x = source.far.x + source.width();
-  if (bounds.far.y > source.far.y + source.height()) bounds.far.y = source.far.y + source.height();  
+  auto w = source.width(); w -= w % 4;
+  auto h = source.height(); h -= h % 4;
+  if (bounds.near.x < source.near.x - w) bounds.near.x = source.near.x - w;
+  if (bounds.near.y < source.near.y - h) bounds.near.y = source.near.y - h;
+  if (bounds.far.x > source.far.x + w)  bounds.far.x = source.far.x + w;
+  if (bounds.far.y > source.far.y + source.height()) bounds.far.y = source.far.y + h;
+  int x, y;
+  if ((x = bounds.near.x & 0x3) != 0 && bounds.near.x + x <= source.near.x) bounds.near.x += x;
+  if ((y = bounds.near.y & 0x3) != 0 && bounds.near.y + y <= source.near.y) bounds.near.y += y;
+  if ((x = bounds.far.x & 0x3) != 0 && bounds.far.x - x >= source.far.x) bounds.far.x -= x;
+  if ((y = bounds.far.y & 0x3) != 0 && bounds.far.y - y >= source.far.y) bounds.far.y -= y;
 }
 
 
@@ -973,36 +1033,52 @@ int test_mwt_align_slide() {
 }
 
 int test_mwt_align_best() {
-  char data[16][21] = {
-   /*01234567891123456789*/
-    "   !AWYZYWSYZYWZzjzj",
-    "    !AXZXWYWXYWXZzjj",
-    "     @NZWYZYWYZWYZzs",
-    "       @NZYWWYZWYWZx",
-    "       !AWYZYWSYZYWZ",
-    "       !AXZXWYWXYWXZ",
-    "       @NZWYZYWYZWYZ",
-    "        @NZYWWYZWYWZ",
-    "       !AWYZYWSYZYWZ",
-    "       !AXZXWYWXYWXZ",
-    "       @NZWYZYWYZWYZ",
-    "        @NZYWWYZWYWZ",
-    "       !AWYZYWSYZYWZ",
-    "         !AXZXWYWXYW",
-    "          @NZWYZYWYZ",
-    "            @NZYWWYZ"
+  char data[26][41] = {
+   /*0123456789112345678921234567893123456789*/
+    "       !AWYZYWSYZYWZzjabgeacbaedcfzjervv",
+    "        !AWYZYWSYZYWZzjabgeacbaedcfzjzvc",
+    "         !AWYZYWSYZYWZzjabgeacbaedcfzjsz",
+    "          !AWYZYWSYZYWZzjabgeacgaedcfzjf",
+    "           !AWYZYWSYZYWZzjabeacbgaedcfzj",
+    "            !AXZXWYWXYWXZzjjabgacbgaedcf",
+    "             @NZWYZYWYZWYZzabgecbgaedcfs",
+    "               @NZYWWYZWYWZabgeacbgaedfx",
+    "               !AWYZYWSYZYWZabgecbgaedcf",
+    "               !AXZXWYWXYWXZabgeacbaedcf",
+    "               @NZWYZYWYZWYZabgeacgaedcf",
+    "                @NZYWWYZWYWZbgeacbgaedcf",
+    "               !AWYZYWSYZYWZageacbgaedcf",
+    "               !AXZXWYWXYWXZabeacbgaedcf",
+    "               @NZWYZYWYZWYZabeacbgaedcf",
+    "                @NZYWWYZWYWZabgeabgaedcf",
+    "               !AWYZYWSYZYWZabgacbgaedcf",
+    "                 !AXZXWYWXYWabgeabgaedcf",
+    "                  @NZWYZYWYZabgecbgaedcf",
+    "                    @NZYWWYZabgeabgaedcf",
+    "                     @NZYWWYZabacbgaedcf",
+    "                      @NZYWWYZagebgaedcf",
+    "                       @NZYWWYZageacedcf",
+    "                        @NZYWWYZageacbga",
+    "                         @NZYWWYZageacga",
+    "                          @NZYWWYZagebga"
   };
-  short *data_i16 = new short[20*16*sizeof(short)];
-  uint8_t *data_u8 = new uint8_t[20*16*sizeof(uint8_t)];
-  for (int i = 0; i < 16; i++) {
-    for (int j = 0; j < 20; j++) {
-      data_i16[i*20+j] = (short)data[i][j] * 64;
-      data_u8[i*20+j] = (uint8_t)data[i][j];
+  short *data_i16 = new short[26*41*sizeof(short)];
+  uint8_t *data_u8 = new uint8_t[26*41*sizeof(uint8_t)];
+  for (int i = 0; i < 26; i++) {
+    for (int j = 0; j < 40; j++) {
+      data_i16[i*40+j] = (short)data[i][j] * 64;
+      data_u8[i*40+j] = (uint8_t)data[i][j];
     }
   }
 
-  Image full_i16(data_i16, Point(16, 20), false); full_i16.owns_pixels = true;
-  Image8 full_u8(data_u8, Point(16, 20), false); full_u8.owns_pixels = true;
+  Image full_i16(data_i16, Point(26, 40), false); full_i16.owns_pixels = true;
+  Image8 full_u8(data_u8, Point(26, 40), false); full_u8.owns_pixels = true;
+
+  Profile search(Rectangle(0, 7, 0, 7), Profile::OverX);
+  Rectangle over = full_i16.bounds;
+  search.best_tiled_inside(full_i16, over);
+
+  if (search.source.near.x < 5 || search.source.far.x > 21 || search.source.near.y < 10 || search.source.far.y > 30) return 1;
 
   return 0;
 }

@@ -192,6 +192,8 @@ public:
   inline Rectangle& cropTo(const Rectangle& r) { return (*this) *= r; }
   inline Rectangle& expand(int i) { near-=i; far+=i; return *this; }
   inline Rectangle& adoptOrigin(const Point& p) { near -= p; far -= p; return *this; }
+  inline Rectangle& nearTo(const Point& p) { far -= near; far += p; near = p; return *this; }
+  inline Rectangle& farTo(const Point& p) { near -= far; near += p; far = p; return *this; }
   
   inline Rectangle operator+(const Point& p) const { return Rectangle(near+p,far+p); }
   inline Rectangle operator-(const Point& p) const { return Rectangle(near-p,far-p); }

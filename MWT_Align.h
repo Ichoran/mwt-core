@@ -97,6 +97,7 @@ private:
 
   void set_margins(int dist, Collapse dir, Rectangle &sub, Rectangle &add, int &absdist);
   Rectangle constrain_source(Rectangle frameBounds, Rectangle regionBounds);
+  float best_tiled_inside(Image& frame, Rectangle search);
   void constrain_bounds_nearby(Rectangle &bounds);
 public:
 
@@ -133,7 +134,7 @@ public:
     *
     * (Note: the search is not exhaustive.)
     */
-  void best_near(Image& frame, Rectangle search);
+  void best_inside(Image& frame, Rectangle search);
 
   /** Find and adopt the best quality within `search`, keeping the dimensions of the Profile.
     * The current position is updated to the best position.  Distances and widths are rounded to
@@ -143,7 +144,7 @@ public:
     *
     * (Note: the search is not exhaustive.)
     */
-  void best_near8(Image8& frame, Rectangle search);
+  void best_inside8(Image8& frame, Rectangle search);
 
   /** Given the profile in `probe`, find the offset between the stored profile and the probe profile. */
   float align(Profile* that);
@@ -153,6 +154,8 @@ public:
 
   /** Find the offset between the 8 bit image in `frame` and the stored profile in `*that` by computing and comparing the new profile. */
   inline float delta8(Image8& frame, Profile* that) { imprint8(frame); return align(that); }
+
+  friend int test_mwt_align_best();
 };
 
 

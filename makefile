@@ -40,10 +40,10 @@ MWT_Image.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_I
 unit_image: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.cc
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_image MWT_Image.cc
 
-MWT_Align.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Align.h MWT_Align.cc
+MWT_Align.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Align.h MWT_Align.cc
 	$(CC) $(FLAGS) $(TGT) -c -o MWT_Align.o MWT_Align.cc
 
-unit_align: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Align.h MWT_Align.cc
+unit_align: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Align.h MWT_Align.cc
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_align MWT_Align.cc MWT_Image.o
 
 MWT_Blob.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Align.h MWT_Blob.h MWT_Blob.cc
@@ -89,11 +89,14 @@ grind: unit_library
 	valgrind --leak-check=full --error-exitcode=2 ./unit_library -quiet
 
 clean:
-	rm -f unit_geometry unit_lists unit_storage unit_image unit_align unit_blob unit_model unit_library
+	rm -f unit_geometry unit_lists unit_storage unit_image unit_align unit_blob unit_model unit_library mwt_bench
 	rm -f test_image.tiff performance_imprint.tiff worm_imprint.tiff worm_noisy.tiff
 	rm -f test_blob.log
 	rm -f *.o
 	rm -f test*.tiff
+	rm -f at*.tiff
+	rm -f fg*.tiff bg*.tiff
+	rm -f performance*.tiff
 	rm -f 20071226_105033/*
 	rm -f 20071212_130514/*
 	if [ -a 20071226_105033 ]; then rmdir 20071226_105033; fi
