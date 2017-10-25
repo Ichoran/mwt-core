@@ -684,6 +684,7 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
     for (c.y = corner.y; source.nearTo(c), source.far.y <= bounds.far.y; c.y += delta.y) {
       imprint(frame);
       auto q = quality();
+      printf("  %2d,%2d  %10.3f %2d %5.2f %7.2f\n", source.near.x, source.near.y, q, n_features, (n_features > 0) ? features[0].position : 0.0, (n_features > 0) ? features[0].strength : 0.0);
       if (q > best_q) {
         best_p = source.near;
         best_q = q;
@@ -695,6 +696,7 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
       for (; source.nearTo(cc), source.far.y <= bounds.far.y; cc.y += delta.y) {
         imprint(frame);
         auto q = quality();
+        printf("  %2d,%2d  %10.3f %2d %5.2f %7.2f\n", source.near.x, source.near.y, q, n_features, (n_features > 0) ? features[0].position : 0.0, (n_features > 0) ? features[0].strength : 0.0);
         if (q > best_q) {
           best_p = source.near;
           best_q = q;
@@ -704,6 +706,57 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
   }
   source.nearTo(best_p);
   imprint(frame);
+  if (dealloc) {
+    delete[](squareref);
+    squareref = NULL;
+  }
+  return best_q;
+}
+
+float Profile::best_tiled_inside8(Image8& frame, Rectangle bounds) {
+  bool dealloc = false;
+  if (squareref == NULL) {
+    squareref = new float[n];
+    dealloc = true
+;  }
+  auto x0 = bounds.near.x; if ((x0 & 0x3) != 0) x0 += 4 - (x0 & 0x3);
+  auto y0 = bounds.near.y; if ((y0 & 0x3) != 0) y0 += 4 - (y0 & 0x3);
+  source += Point(x0, y0) - source.near;
+  bool no_x = source.far.x > bounds.far.x;
+  bool no_y = source.far.y > bounds.far.y;
+  if (no_x) source += Point(bounds.near.x - x0, 0);
+  if (no_y) source += Point(0, bounds.near.y - y0);
+  auto corner = source.near;
+  auto best_p = source.near;
+  float best_q = 0;
+  auto halfdelta = (source.size() / 8); halfdelta *= 4;
+  if (halfdelta.x <= 1) halfdelta.x = 2;
+  if (halfdelta.y <= 1) halfdelta.y = 2;
+  auto delta = halfdelta * 2;
+  for (auto c = corner; source.nearTo(c), source.far.x <= bounds.far.x; c.x += delta.x) {
+    for (c.y = corner.y; source.nearTo(c), source.far.y <= bounds.far.y; c.y += delta.y) {
+      imprint8(frame);
+      auto q = quality();
+      if (q > best_q) {
+        best_p = source.near;
+        best_q = q;
+      }
+    }
+    auto cc = Point(c.x, corner.y);
+    cc += halfdelta;
+    if (cc.x + source.width() <= bounds.far.x && cc.y + source.height() <= bounds.far.y) {
+      for (; source.nearTo(cc), source.far.y <= bounds.far.y; cc.y += delta.y) {
+        imprint8(frame);
+        auto q = quality();
+        if (q > best_q) {
+          best_p = source.near;
+          best_q = q;
+        }
+      }
+    }
+  }
+  source.nearTo(best_p);
+  imprint8(frame);
   if (dealloc) {
     delete[](squareref);
     squareref = NULL;
@@ -1035,50 +1088,83 @@ int test_mwt_align_slide() {
 int test_mwt_align_best() {
   char data[26][41] = {
    /*0123456789112345678921234567893123456789*/
-    "       !AWYZYWSYZYWZzjabgeacbaedcfzjervv",
-    "        !AWYZYWSYZYWZzjabgeacbaedcfzjzvc",
-    "         !AWYZYWSYZYWZzjabgeacbaedcfzjsz",
-    "          !AWYZYWSYZYWZzjabgeacgaedcfzjf",
-    "           !AWYZYWSYZYWZzjabeacbgaedcfzj",
-    "            !AXZXWYWXYWXZzjjabgacbgaedcf",
-    "             @NZWYZYWYZWYZzabgecbgaedcfs",
-    "               @NZYWWYZWYWZabgeacbgaedfx",
-    "               !AWYZYWSYZYWZabgecbgaedcf",
-    "               !AXZXWYWXYWXZabgeacbaedcf",
-    "               @NZWYZYWYZWYZabgeacgaedcf",
-    "                @NZYWWYZWYWZbgeacbgaedcf",
-    "               !AWYZYWSYZYWZageacbgaedcf",
-    "               !AXZXWYWXYWXZabeacbgaedcf",
-    "               @NZWYZYWYZWYZabeacbgaedcf",
-    "                @NZYWWYZWYWZabgeabgaedcf",
-    "               !AWYZYWSYZYWZabgacbgaedcf",
-    "                 !AXZXWYWXYWabgeabgaedcf",
-    "                  @NZWYZYWYZabgecbgaedcf",
-    "                    @NZYWWYZabgeabgaedcf",
-    "                     @NZYWWYZabacbgaedcf",
-    "                      @NZYWWYZagebgaedcf",
-    "                       @NZYWWYZageacedcf",
-    "                        @NZYWWYZageacbga",
-    "                         @NZYWWYZageacga",
-    "                          @NZYWWYZagebga"
+    "     !AWYZYWSYZYWZzjabgeacbaedcfzjervvih",
+    "      !AWYZYWSYZYWZzjabgeacbaedcfzjzvcih",
+    "       !AWYZYWSYZYWZzjabgeacbaedcfzjszih",
+    "        !AWYZYWSYZYWZzjabgeacgaedcfzjfih",
+    "         !AWYZYWSYZYWZzjabeacbgaedcfzjih",
+    "          !AXZXWYWXYWXZzjjabgacbgaedcfih",
+    "           @NZWYZYWYZWYZzabgecbgaedcfsih",
+    "             @NZYWWYZWYWZabgeacbgaedfxih",
+    "             !AWYZYWSYZYWZabgecbgaedcfih",
+    "             !AXZXWYWXYWXZabgeacbaedcfih",
+    "             @NZWYZYWYZWYZabgeacgaedcfih",
+    "              @NZYWWYZWYWZbgeacbgaedcfih",
+    "             !AWYZYWSYZYWZageacbgaedcfih",
+    "             !AXZXWYWXYWXZabeacbgaedcfih",
+    "             @NZWYZYWYZWYZabeacbgaedcfih",
+    "              @NZYWWYZWYWZabgeabgaedcfih",
+    "             !AWYZYWSYZYWZabgacbgaedcfih",
+    "               !AXZXWYWXYWabgeabgaedcfih",
+    "                @NZWYZYWYZabgecbgaedcfih",
+    "                  @NZYWWYZabgeabgaedcfih",
+    "                   @NZYWWYZabacbgaedcfih",
+    "                    @NZYWWYZagebgaedcfih",
+    "                     @NZYWWYZageacedcfih",
+    "                      @NZYWWYZageacbgaih",
+    "                       @NZYWWYZageacgaih",
+    "                        @NZYWWYZagebgaih"
   };
-  short *data_i16 = new short[26*41*sizeof(short)];
-  uint8_t *data_u8 = new uint8_t[26*41*sizeof(uint8_t)];
+  short *data_i16 = new short[26*40*sizeof(short)];
+  short *data_i16t = new short[26*40*sizeof(short)];
+  uint8_t *data_u8 = new uint8_t[26*40*sizeof(uint8_t)];
+  uint8_t *data_u8t = new uint8_t[26*40*sizeof(uint8_t)];
   for (int i = 0; i < 26; i++) {
     for (int j = 0; j < 40; j++) {
       data_i16[i*40+j] = (short)data[i][j] * 64;
+      data_i16t[j*26+i] = data_i16[i*40+j];
       data_u8[i*40+j] = (uint8_t)data[i][j];
+      data_u8t[j*26+i] = (uint8_t)data[i][j];
     }
   }
 
   Image full_i16(data_i16, Point(26, 40), false); full_i16.owns_pixels = true;
   Image8 full_u8(data_u8, Point(26, 40), false); full_u8.owns_pixels = true;
+  Image full_i16t(data_i16t, Point(40, 26), false); full_i16t.owns_pixels = true;
+  Image8 full_u8t(data_u8t, Point(40, 26), false); full_u8t.owns_pixels = true;
 
   Profile search(Rectangle(0, 7, 0, 7), Profile::OverX);
   Rectangle over = full_i16.bounds;
   search.best_tiled_inside(full_i16, over);
+  printf("%d,%d %dx%d\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height());
 
-  if (search.source.near.x < 5 || search.source.far.x > 21 || search.source.near.y < 10 || search.source.far.y > 30) return 1;
+  Profile searcht(Rectangle(0, 7, 0, 7), Profile::OverY);
+  Rectangle overt = full_i16t.bounds;
+  searcht.best_tiled_inside(full_i16t, overt);
+  printf("%d,%d %dx%d\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height());
+
+  Profile search8(Rectangle(0, 7, 0, 7), Profile::OverX);
+  Rectangle over8 = full_u8.bounds;
+  search8.best_tiled_inside8(full_u8, over8);
+  printf("%d,%d %dx%d\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height());
+
+  Profile searcht8(Rectangle(0, 7, 0, 7), Profile::OverY);
+  Rectangle overt8 = full_u8t.bounds;
+  searcht8.best_tiled_inside8(full_u8t, overt8);
+  printf("%d,%d %dx%d\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height());
+
+  Point correct_tile(12, 12);
+  Point size(8, 8);
+
+  if (search.source.near != correct_tile) return 1;
+  if (searcht.source.near != correct_tile) return 2;
+  if (search8.source.near != correct_tile) return 3;
+  if (searcht8.source.near != correct_tile) return 4;
+
+  if (search.source.size() != size) return 5;
+  if (searcht.source.size() != size) return 6;
+  if (search8.source.size() != size) return 7;
+  if (searcht8.source.size() != size) return 8;
 
   return 0;
 }

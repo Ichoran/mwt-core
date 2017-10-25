@@ -98,6 +98,7 @@ private:
   void set_margins(int dist, Collapse dir, Rectangle &sub, Rectangle &add, int &absdist);
   Rectangle constrain_source(Rectangle frameBounds, Rectangle regionBounds);
   float best_tiled_inside(Image& frame, Rectangle search);
+  float best_tiled_inside8(Image8& frame, Rectangle search);
   void constrain_bounds_nearby(Rectangle &bounds);
 public:
 

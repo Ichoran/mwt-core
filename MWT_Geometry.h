@@ -28,6 +28,7 @@ public:
   Point(int X,int Y) : x(X),y(Y) { }
   
   Point dup() const { return Point(*this); }
+  Point swap() const { return Point(y, x); }
   
   inline bool operator==(const Point& p) const { return (x==p.x && y==p.y); }
   inline bool operator!=(const Point& p) const { return (x!=p.x || y!=p.y); }
@@ -77,6 +78,7 @@ public:
   FPoint(const Point &p) : x(p.x),y(p.y) { }
   
   FPoint dup() const { return FPoint(*this); }
+  FPoint swap() const { return FPoint(y, x); }
   Point toPoint() const { return Point( (int)floor(x+0.5) , (int)floor(y+0.5) ); }
   
   inline bool operator==(const FPoint& p) const { return (x==p.x && y==p.y); }
@@ -141,7 +143,8 @@ public:
   Rectangle(Point A,Point B) : near(A),far(B) { }
   Rectangle(int L,int R,int B,int U) : near(L,B),far(R,U) { }
   
-  Rectangle dup() const { return Rectangle(near,far); }
+  Rectangle dup() const { return Rectangle(near, far); }
+  Rectangle swap() const { return Rectangle(near.swap(), far.swap()); }
   
   inline bool operator<(const Rectangle& r) const { return (near.x<r.near.x || (near.x==r.near.x && near.y<r.near.y)); }
   inline bool operator==(const Rectangle& r) const { return near==r.near && far==r.far; }
