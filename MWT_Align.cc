@@ -778,6 +778,7 @@ float Profile::best_shifted_inside(Image& frame, Rectangle bounds, int& shift) {
   Point steps = (bounds.far - source.far)/shift;
   if (steps.x < 0) steps.x = 0;
   if (steps.y < 0) steps.y = 0;
+  imprint(frame);
   auto best_p = source.near;
   auto best_q = quality();
   int nscroll = (direction == Profile::OverX) ? steps.y : steps.x;
@@ -819,7 +820,7 @@ float Profile::best_shifted_inside8(Image8& frame, Rectangle bounds, int& shift)
     dealloc = true;
   }
   if (shift < 1) shift = 1;
-  if (shift > 4) shift = (shift + 2) >> 2;
+  if (shift > 4) shift = ((shift + 2) >> 2) * 4;
   int x, y;
   Point c = bounds.near - source.near;
   if (c.x < 0 && (x = (c.x % shift)) != 0) c.x += shift - x;
@@ -829,6 +830,7 @@ float Profile::best_shifted_inside8(Image8& frame, Rectangle bounds, int& shift)
   Point steps = (bounds.far - source.far)/shift;
   if (steps.x < 0) steps.x = 0;
   if (steps.y < 0) steps.y = 0;
+  imprint8(frame);
   auto best_p = source.near;
   auto best_q = quality();
   int nscroll = (direction == Profile::OverX) ? steps.y : steps.x;
@@ -879,31 +881,78 @@ void Profile::constrain_bounds_nearby(Rectangle &bounds) {
 }
 
 
-/*
-void Profile::best_inside(Image &frame, Rectangle search) {
+float Profile::best_inside(Image &frame, Rectangle search) {
+  bool dealloc = false;
+  if (squareref == NULL) {
+    squareref = new float[n];
+    dealloc = true;
+  }
   Rectangle bounds = constrain_source(frame.getBounds(), search);
   if (
     bounds.width() >= source.width() &&
     bounds.height() >= source.height() &&
     (bounds.width()/source.width())*(bounds.height()/source.height()) > 3
   ) {
-    best_tile_near(frame, bounds);
+    best_tiled_inside(frame, bounds);
     constrain_bounds_nearby(bounds);
   }
-  int xlo = bounds.near.x - source.near.x;
-  int xhi = bounds.far.x - source.far.x;
-  int ylo = bounds.near.y - source.near.y;
-  int yhi = bounds.far.y - source.far.y;
-  int xbest = 0;
-  int ybest = 0;
-  float qbest = 0.0;
-  if (squareref != NULL) squareref = new float[n];
-  if (direction == OverX) {
-
-    imprint(frame);
+  int ex = bounds.width() - source.width();
+  int ey = bounds.height() - source.height();
+  int thin = (source.width() < source.height()) ? source.width()/2 : source.height()/2; if (thin < 1) thin = 1;
+  int sh = 4;
+  while (ex > 0 && ey > 0 && sh < 128 && ((1+ex) / sh)*((1+ey) / sh) >= 64) sh *= 4;
+  while (sh > thin) sh /= 2;
+  while (sh > 4) {
+    best_shifted_inside(frame, bounds, sh);
+    auto margin = sh + (sh >> 2);
+    bounds = bounds * Rectangle(source.near - margin, source.far + margin);
+    sh /= 2;
+    if (sh < 4 && sh < thin) sh = thin;
   }
+  float result = best_shifted_inside(frame, bounds, sh);
+  if (dealloc) {
+    delete[](squareref);
+    squareref = NULL;
+  }
+  return result;
 }
-*/
+
+float Profile::best_inside8(Image8 &frame, Rectangle search) {
+  bool dealloc = false;
+  if (squareref == NULL) {
+    squareref = new float[n];
+    dealloc = true;
+  }
+  Rectangle bounds = constrain_source(frame.getBounds(), search);
+  if (
+    bounds.width() >= source.width() &&
+    bounds.height() >= source.height() &&
+    (bounds.width()/source.width())*(bounds.height()/source.height()) > 3
+  ) {
+    best_tiled_inside8(frame, bounds);
+    constrain_bounds_nearby(bounds);
+  }
+  int ex = bounds.width() - source.width();
+  int ey = bounds.height() - source.height();
+  int thin = (source.width() < source.height()) ? source.width()/2 : source.height()/2; if (thin < 1) thin = 1;
+  int sh = 4;
+  while (ex > 0 && ey > 0 && sh < 128 && ((1+ex) / sh)*((1+ey) / sh) >= 64) sh *= 4;
+  while (sh > thin) sh /= 2;
+  while (sh > 4) {
+    best_shifted_inside8(frame, bounds, sh);
+    auto margin = sh + (sh >> 2);
+    bounds = bounds * Rectangle(source.near - margin, source.far + margin);
+    sh /= 2;
+    if (sh < 4 && sh < thin) sh = thin;
+  }
+  float result = best_shifted_inside8(frame, bounds, sh);
+  if (dealloc) {
+    delete[](squareref);
+    squareref = NULL;
+  }
+  return result;
+}
+
 
 
 int test_mwt_align_features() {
@@ -1290,6 +1339,31 @@ int test_mwt_align_best() {
   if (qi8 - q8 < -0.1) return 16;
   if (search.source.near != search8.source.near) return 17;
   if (searcht.source.near != search8t.source.near) return 18;
+
+  Point ni = search.source.near;
+  float qf = search.best_inside(full_i16, over);
+  printf("%f %d,%d\n", qf, search.source.near.x, search.source.near.y);
+
+  Point nit = searcht.source.near;
+  float qft = searcht.best_inside(full_i16t, overt);
+  printf("%f %d,%d\n", qft, searcht.source.near.x, searcht.source.near.y);
+
+  Point ni8 = search8.source.near;
+  float qf8 = search8.best_inside8(full_u8, over8);
+  printf("%f %d,%d\n", qf8, search8.source.near.x, search8.source.near.y);
+
+  Point ni8t = search8t.source.near;
+  float qf8t = search8t.best_inside8(full_u8t, over8t);
+  printf("%f %d,%d\n", qf8t, search8t.source.near.x, search8t.source.near.y);
+
+  if (ni != search.source.near) return 19;
+  if (nit != searcht.source.near) return 20;
+  if (ni8 != search8.source.near) return 21;
+  if (ni8t != search8t.source.near) return 22;
+  if (fabsf(qf - qi) > 1) return 23;
+  if (fabsf(qft - qit) > 1) return 24;
+  if (fabsf(qf8 - qi8) > 0.1) return 25;
+  if (fabsf(qf8t - qi8t) > 0.1) return 26;
 
   return 0;
 }

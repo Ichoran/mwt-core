@@ -135,9 +135,11 @@ public:
     *
     * The Profile will be imprinted on the best position when this routine is complete.
     *
+    * Returns a quality score (absolute value is meaningless, but can be used for rankings).
+    *
     * (Note: the search is not exhaustive.)
     */
-  void best_inside(Image& frame, Rectangle search);
+  float best_inside(Image& frame, Rectangle search);
 
   /** Find and adopt the best quality within `search`, keeping the dimensions of the Profile.
     * The current position is updated to the best position.  Distances and widths are rounded to
@@ -145,9 +147,11 @@ public:
     *
     * The Profile will be imprinted on the best position when this routine is complete. 
     *
+    * Returns a quality score (absolute value is meaningless, but can be used for rankings).
+    *
     * (Note: the search is not exhaustive.)
     */
-  void best_inside8(Image8& frame, Rectangle search);
+  float best_inside8(Image8& frame, Rectangle search);
 
   /** Given the profile in `probe`, find the offset between the stored profile and the probe profile. */
   float align(Profile* that);
