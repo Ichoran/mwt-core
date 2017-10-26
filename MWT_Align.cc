@@ -510,7 +510,6 @@ void Profile::slide(Image &frame, int distance) {
   Rectangle add, sub;
   int absdist;
   set_margins(distance, OverX, sub, add, absdist);
-  if (direction==OverY) printf("%d to %d; %d to %d\n", add.near.x, add.far.x, add.near.y, add.far.y);
   sub = sub * frame.getBounds();
   add = add * frame.getBounds();
   float mult = absdist / (float)((direction == OverX) ? source.width() : source.height());
@@ -664,8 +663,8 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
   bool dealloc = false;
   if (squareref == NULL) {
     squareref = new float[n];
-    dealloc = true
-;  }
+    dealloc = true;
+  }
   auto x0 = bounds.near.x; if ((x0 & 0x3) != 0) x0 += 4 - (x0 & 0x3);
   auto y0 = bounds.near.y; if ((y0 & 0x3) != 0) y0 += 4 - (y0 & 0x3);
   source += Point(x0, y0) - source.near;
@@ -684,7 +683,6 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
     for (c.y = corner.y; source.nearTo(c), source.far.y <= bounds.far.y; c.y += delta.y) {
       imprint(frame);
       auto q = quality();
-      printf("  %2d,%2d  %10.3f %2d %5.2f %7.2f\n", source.near.x, source.near.y, q, n_features, (n_features > 0) ? features[0].position : 0.0, (n_features > 0) ? features[0].strength : 0.0);
       if (q > best_q) {
         best_p = source.near;
         best_q = q;
@@ -696,7 +694,6 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
       for (; source.nearTo(cc), source.far.y <= bounds.far.y; cc.y += delta.y) {
         imprint(frame);
         auto q = quality();
-        printf("  %2d,%2d  %10.3f %2d %5.2f %7.2f\n", source.near.x, source.near.y, q, n_features, (n_features > 0) ? features[0].position : 0.0, (n_features > 0) ? features[0].strength : 0.0);
         if (q > best_q) {
           best_p = source.near;
           best_q = q;
@@ -717,11 +714,11 @@ float Profile::best_tiled_inside8(Image8& frame, Rectangle bounds) {
   bool dealloc = false;
   if (squareref == NULL) {
     squareref = new float[n];
-    dealloc = true
-;  }
+    dealloc = true;
+  }
   auto x0 = bounds.near.x; if ((x0 & 0x3) != 0) x0 += 4 - (x0 & 0x3);
   auto y0 = bounds.near.y; if ((y0 & 0x3) != 0) y0 += 4 - (y0 & 0x3);
-  source += Point(x0, y0) - source.near;
+  source.nearTo(Point(x0, y0));
   bool no_x = source.far.x > bounds.far.x;
   bool no_y = source.far.y > bounds.far.y;
   if (no_x) source += Point(bounds.near.x - x0, 0);
@@ -764,6 +761,108 @@ float Profile::best_tiled_inside8(Image8& frame, Rectangle bounds) {
   return best_q;
 }
 
+float Profile::best_shifted_inside(Image& frame, Rectangle bounds, int& shift) {
+  bool dealloc = false;
+  if (squareref == NULL) {
+    squareref = new float[n];
+    dealloc = true;
+  }
+  if (shift < 1) shift = 1;
+  if (shift > 4) shift = (shift + 2) >> 2;
+  int x, y;
+  Point c = bounds.near - source.near;
+  if (c.x < 0 && (x = (c.x % shift)) != 0) c.x += shift - x;
+  if (c.y < 0 && (y = (c.y % shift)) != 0) c.y += shift - y;
+  Point corner = source.near + c;
+  source.nearTo(corner);
+  Point steps = (bounds.far - source.far)/shift;
+  if (steps.x < 0) steps.x = 0;
+  if (steps.y < 0) steps.y = 0;
+  auto best_p = source.near;
+  auto best_q = quality();
+  int nscroll = (direction == Profile::OverX) ? steps.y : steps.x;
+  int nslide  = (direction == Profile::OverX) ? steps.x : steps.y;
+  int iscroll = 0;
+  int islide = 0;
+  int sh = shift;
+  while (iscroll + islide < nscroll + nslide) {
+    if (iscroll < nscroll) {
+      scroll(frame, sh);
+      iscroll += 1;
+    }
+    else {
+      slide(frame, shift);
+      sh = -sh;
+      islide += 1;
+      iscroll = 0;
+    }
+    auto q = quality();
+    if (q > best_q) {
+      best_p = source.near;
+      best_q = q;
+    }
+  }
+  source.nearTo(best_p);
+  imprint(frame);
+  best_q = quality(); // Need to recompute because of possible errors during sliding
+  if (dealloc) {
+    delete[](squareref);
+    squareref = NULL;
+  }
+  return best_q;  
+}
+
+float Profile::best_shifted_inside8(Image8& frame, Rectangle bounds, int& shift) {
+  bool dealloc = false;
+  if (squareref == NULL) {
+    squareref = new float[n];
+    dealloc = true;
+  }
+  if (shift < 1) shift = 1;
+  if (shift > 4) shift = (shift + 2) >> 2;
+  int x, y;
+  Point c = bounds.near - source.near;
+  if (c.x < 0 && (x = (c.x % shift)) != 0) c.x += shift - x;
+  if (c.y < 0 && (y = (c.y % shift)) != 0) c.y += shift - y;
+  Point corner = source.near + c;
+  source.nearTo(corner);
+  Point steps = (bounds.far - source.far)/shift;
+  if (steps.x < 0) steps.x = 0;
+  if (steps.y < 0) steps.y = 0;
+  auto best_p = source.near;
+  auto best_q = quality();
+  int nscroll = (direction == Profile::OverX) ? steps.y : steps.x;
+  int nslide  = (direction == Profile::OverX) ? steps.x : steps.y;
+  int iscroll = 0;
+  int islide = 0;
+  int sh = shift;
+  while (iscroll + islide < nscroll + nslide) {
+    if (iscroll < nscroll) {
+      scroll8(frame, sh);
+      iscroll += 1;
+    }
+    else {
+      slide8(frame, shift);
+      sh = -sh;
+      islide += 1;
+      iscroll = 0;
+    }
+    auto q = quality();
+    if (q > best_q) {
+      best_p = source.near;
+      best_q = q;
+    }
+  }
+  source.nearTo(best_p);
+  imprint8(frame);
+  best_q = quality(); // Need to recompute because of possible errors during sliding
+  if (dealloc) {
+    delete[](squareref);
+    squareref = NULL;
+  }
+  return best_q;  
+}
+
 
 void Profile::constrain_bounds_nearby(Rectangle &bounds) {
   auto w = source.width(); w -= w % 4;
@@ -773,15 +872,15 @@ void Profile::constrain_bounds_nearby(Rectangle &bounds) {
   if (bounds.far.x > source.far.x + w)  bounds.far.x = source.far.x + w;
   if (bounds.far.y > source.far.y + source.height()) bounds.far.y = source.far.y + h;
   int x, y;
-  if ((x = bounds.near.x & 0x3) != 0 && bounds.near.x + x <= source.near.x) bounds.near.x += x;
-  if ((y = bounds.near.y & 0x3) != 0 && bounds.near.y + y <= source.near.y) bounds.near.y += y;
+  if ((x = bounds.near.x & 0x3) != 0 && bounds.near.x + (4-x) <= source.near.x) bounds.near.x += 4-x;
+  if ((y = bounds.near.y & 0x3) != 0 && bounds.near.y + (4-y) <= source.near.y) bounds.near.y += 4-y;
   if ((x = bounds.far.x & 0x3) != 0 && bounds.far.x - x >= source.far.x) bounds.far.x -= x;
   if ((y = bounds.far.y & 0x3) != 0 && bounds.far.y - y >= source.far.y) bounds.far.y -= y;
 }
 
 
 /*
-void Profile::best_near(Image &frame, Rectangle search) {
+void Profile::best_inside(Image &frame, Rectangle search) {
   Rectangle bounds = constrain_source(frame.getBounds(), search);
   if (
     bounds.width() >= source.width() &&
@@ -1135,23 +1234,23 @@ int test_mwt_align_best() {
 
   Profile search(Rectangle(0, 7, 0, 7), Profile::OverX);
   Rectangle over = full_i16.bounds;
-  search.best_tiled_inside(full_i16, over);
-  printf("%d,%d %dx%d\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height());
+  float q = search.best_tiled_inside(full_i16, over);
+  printf("%d,%d %dx%d  %f\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height(), q);
 
   Profile searcht(Rectangle(0, 7, 0, 7), Profile::OverY);
   Rectangle overt = full_i16t.bounds;
-  searcht.best_tiled_inside(full_i16t, overt);
-  printf("%d,%d %dx%d\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height());
+  float qt = searcht.best_tiled_inside(full_i16t, overt);
+  printf("%d,%d %dx%d  %f\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height(), qt);
 
   Profile search8(Rectangle(0, 7, 0, 7), Profile::OverX);
   Rectangle over8 = full_u8.bounds;
-  search8.best_tiled_inside8(full_u8, over8);
-  printf("%d,%d %dx%d\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height());
+  float q8 = search8.best_tiled_inside8(full_u8, over8);
+  printf("%d,%d %dx%d  %f\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height(), q8);
 
-  Profile searcht8(Rectangle(0, 7, 0, 7), Profile::OverY);
-  Rectangle overt8 = full_u8t.bounds;
-  searcht8.best_tiled_inside8(full_u8t, overt8);
-  printf("%d,%d %dx%d\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height());
+  Profile search8t(Rectangle(0, 7, 0, 7), Profile::OverY);
+  Rectangle over8t = full_u8t.bounds;
+  float q8t = search8t.best_tiled_inside8(full_u8t, over8t);
+  printf("%d,%d %dx%d  %f\n", search.source.near.x, search.source.near.y, search.source.width(), search.source.height(), q8t);
 
   Point correct_tile(12, 12);
   Point size(8, 8);
@@ -1159,12 +1258,38 @@ int test_mwt_align_best() {
   if (search.source.near != correct_tile) return 1;
   if (searcht.source.near != correct_tile) return 2;
   if (search8.source.near != correct_tile) return 3;
-  if (searcht8.source.near != correct_tile) return 4;
+  if (search8t.source.near != correct_tile) return 4;
 
   if (search.source.size() != size) return 5;
   if (searcht.source.size() != size) return 6;
   if (search8.source.size() != size) return 7;
-  if (searcht8.source.size() != size) return 8;
+  if (search8t.source.size() != size) return 8;
+
+  if (fabsf(q - qt) > 1) return 9;
+  if (fabsf(q8 - q8t) > 0.1) return 10;
+
+  int shift = 4;
+
+  float qi = search.best_shifted_inside(full_i16, over, shift);
+  printf("%f %d,%d\n", qi, search.source.near.x, search.source.near.y);
+
+  float qit = searcht.best_shifted_inside(full_i16t, overt, shift);
+  printf("%f %d,%d\n", qit, search.source.near.x, search.source.near.y);
+
+  float qi8 = search8.best_shifted_inside8(full_u8, over8, shift);
+  printf("%f %d,%d\n", qi8, search.source.near.x, search.source.near.y);
+
+  float qi8t = search8t.best_shifted_inside8(full_u8t, over8t, shift);
+  printf("%f %d,%d\n", qi8t, search.source.near.x, search.source.near.y);
+
+  if (fabsf(qi - qit) > 1) return 11;
+  if (qi - q < -1) return 12;
+  if (qit - qt < -1) return 13;
+  if (search.source.near != searcht.source.near.swap()) return 14;
+  if (fabsf(qi8 - qi8t) > 0.1) return 15;
+  if (qi8 - q8 < -0.1) return 16;
+  if (search.source.near != search8.source.near) return 17;
+  if (searcht.source.near != search8t.source.near) return 18;
 
   return 0;
 }
