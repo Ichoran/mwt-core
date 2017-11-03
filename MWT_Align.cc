@@ -25,11 +25,11 @@
 ****************************************************************/
 
 Profile::Profile(const Rectangle src, Collapse dir) : 
-  reference(NULL), squareref(NULL), buffer(NULL), center(0), hist(NULL), n_features(0), source(src), direction(dir), lateral_factor(0.0)
+  reference(NULL), squareref(NULL), buffer(NULL), center(0), hist(NULL), n_features(0), source(src), direction(dir)
 {
   n = (dir == OverX) ? source.height() : source.width();
-  border = (n < 10) ? 1 : n/10;
-  if (n > 0) reference = new float[2*n];
+  n_alloc = n;
+  if (n > 0) reference = new float[2*n_alloc];
 }
 
 float Profile::find_mean(float *values, int count) {
@@ -266,6 +266,20 @@ void Profile::compute_new_values() {
   load_best_features(6);
 }
 
+
+void Profile::imitate(const Profile& that) {
+  n_features = 0;
+  if (n_alloc < that.n) {
+    if (reference != NULL) { delete[] reference; reference = new float[2*that.n]; }
+    if (squareref != NULL) { delete[] squareref; squareref = new float[2*that.n]; }
+    if (buffer != NULL) { delete[] buffer; buffer = new float[2*that.n]; }
+    n_alloc = that.n;
+  }
+  n = that.n;
+  source.near = that.source.near;
+  source.far = that.source.far;
+  direction = that.direction;
+}
 
 void Profile::adopt(float *profile, int length) {
   n = (direction == OverX) ? source.height() : source.width();
@@ -506,7 +520,7 @@ void Profile::slide(Image &frame, int distance) {
     imprint(frame);
     return;
   }
-  if (buffer == NULL) buffer = new float[n*2];
+  if (buffer == NULL) buffer = new float[n_alloc*2];
   Rectangle add, sub;
   int absdist;
   set_margins(distance, OverX, sub, add, absdist);
@@ -534,7 +548,7 @@ void Profile::slide8(Image8 &frame, int distance) {
     imprint8(frame);
     return;
   }
-  if (buffer == NULL) buffer = new float[n*2];
+  if (buffer == NULL) buffer = new float[n_alloc*2];
   Rectangle add, sub;
   int absdist;
   set_margins(distance, OverX, sub, add, absdist);
@@ -562,7 +576,7 @@ void Profile::scroll(Image &frame, int distance) {
     imprint(frame);
     return;
   }
-  if (buffer == NULL) buffer = new float[n*2];
+  if (buffer == NULL) buffer = new float[n_alloc*2];
   Rectangle add, sub;
   int absdist;
   set_margins(distance, OverY, sub, add, absdist);
@@ -600,7 +614,7 @@ void Profile::scroll8(Image8 &frame, int distance) {
     imprint8(frame);
     return;
   }
-  if (buffer == NULL) buffer = new float[n*2];
+  if (buffer == NULL) buffer = new float[n_alloc*2];
   Rectangle add, sub;
   int absdist;
   set_margins(distance, OverY, sub, add, absdist);
@@ -649,10 +663,11 @@ Rectangle Profile::constrain_source(Rectangle frameBounds, Rectangle regionBound
   else if (actual.far.y < source.far.y) source -= Point(0, source.far.y - actual.far.y);
   int m = (direction == OverX) ? source.height() : source.width();
   if (m != n) {
-    if (n > m) {
+    if (n_alloc < m) {
       if (reference != NULL) { delete[] reference; reference = new float[m]; }
       if (squareref != NULL) { delete[] squareref; squareref = new float[m]; }
       if (buffer != NULL) { delete[] buffer; buffer = new float[2*m]; }
+      n_alloc = m;
     }
     n = m;
   }
@@ -662,7 +677,7 @@ Rectangle Profile::constrain_source(Rectangle frameBounds, Rectangle regionBound
 float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
   bool dealloc = false;
   if (squareref == NULL) {
-    squareref = new float[n];
+    squareref = new float[n_alloc];
     dealloc = true;
   }
   auto x0 = bounds.near.x; if ((x0 & 0x3) != 0) x0 += 4 - (x0 & 0x3);
@@ -713,7 +728,7 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
 float Profile::best_tiled_inside8(Image8& frame, Rectangle bounds) {
   bool dealloc = false;
   if (squareref == NULL) {
-    squareref = new float[n];
+    squareref = new float[n_alloc];
     dealloc = true;
   }
   auto x0 = bounds.near.x; if ((x0 & 0x3) != 0) x0 += 4 - (x0 & 0x3);
@@ -764,7 +779,7 @@ float Profile::best_tiled_inside8(Image8& frame, Rectangle bounds) {
 float Profile::best_shifted_inside(Image& frame, Rectangle bounds, int& shift) {
   bool dealloc = false;
   if (squareref == NULL) {
-    squareref = new float[n];
+    squareref = new float[n_alloc];
     dealloc = true;
   }
   if (shift < 1) shift = 1;
@@ -816,7 +831,7 @@ float Profile::best_shifted_inside(Image& frame, Rectangle bounds, int& shift) {
 float Profile::best_shifted_inside8(Image8& frame, Rectangle bounds, int& shift) {
   bool dealloc = false;
   if (squareref == NULL) {
-    squareref = new float[n];
+    squareref = new float[n_alloc];
     dealloc = true;
   }
   if (shift < 1) shift = 1;
@@ -884,7 +899,7 @@ void Profile::constrain_bounds_nearby(Rectangle &bounds) {
 float Profile::best_inside(Image &frame, Rectangle search) {
   bool dealloc = false;
   if (squareref == NULL) {
-    squareref = new float[n];
+    squareref = new float[n_alloc];
     dealloc = true;
   }
   Rectangle bounds = constrain_source(frame.getBounds(), search);
@@ -920,7 +935,7 @@ float Profile::best_inside(Image &frame, Rectangle search) {
 float Profile::best_inside8(Image8 &frame, Rectangle search) {
   bool dealloc = false;
   if (squareref == NULL) {
-    squareref = new float[n];
+    squareref = new float[n_alloc];
     dealloc = true;
   }
   Rectangle bounds = constrain_source(frame.getBounds(), search);

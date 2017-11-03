@@ -40,6 +40,8 @@ public:
   inline Point& operator-=(int i) { x-=i; y-=i; return *this; }
   inline Point& operator*=(int i) { x*=i; y*=i; return *this; }
   inline Point& operator/=(int i) { x/=i; y/=i; return *this; }
+
+  inline Point& set(int a, int b) { x = a; y = b; return *this; }
   
   inline Point operator+(const Point& p) const { return Point(x+p.x,y+p.y); }
   inline Point operator+(int i) const { return Point(x+i,y+i); }
@@ -61,7 +63,7 @@ public:
   inline int length2() const { return x*x + y*y; }
 };
 inline Point operator+(int i,const Point& p) { return p+i; }
-inline Point operator-(int i,const Point& p) { return p-i; }
+inline Point operator-(int i,const Point& p) { return Point(i - p.x, i - p.y); }
 inline Point operator*(int i,const Point &p) { return p*i; }
 
 
@@ -79,7 +81,7 @@ public:
   
   FPoint dup() const { return FPoint(*this); }
   FPoint swap() const { return FPoint(y, x); }
-  Point toPoint() const { return Point( (int)floor(x+0.5) , (int)floor(y+0.5) ); }
+  Point toPoint() const { return Point( (int)lrintf(x) , (int)lrintf(y) ); }
   
   inline bool operator==(const FPoint& p) const { return (x==p.x && y==p.y); }
   inline bool operator!=(const FPoint& p) const { return (x!=p.x || y!=p.y); }
@@ -92,10 +94,14 @@ public:
   inline FPoint& operator*=(float f) { x*=f; y*=f; return *this; }
   inline FPoint& operator/=(float f) { x/=f; y/=f; return *this; }
 
+  inline FPoint& set(float a, float b) { x = a; y = b; return *this; }
+
   inline FPoint operator+(const FPoint &p) const { return FPoint(x+p.x,y+p.y); }
+  inline FPoint operator+(const Point &p) const { return FPoint(x+p.x, y+p.y); }
   inline FPoint operator+(float f) const { return FPoint(x+f,y+f); }
   inline FPoint operator-() const { return FPoint(-x,-y); }
   inline FPoint operator-(const FPoint &p) const { return FPoint(x-p.x,y-p.y); }
+  inline FPoint operator-(const Point &p) const { return FPoint(x-p.x, y-p.y); }
   inline FPoint operator-(float f) const { return FPoint(x-f,y-f); }
   inline float operator*(const FPoint &p) const { return x*p.x + y*p.y; }
   inline FPoint operator*(float i) const { return FPoint(i*x,i*y); }
@@ -114,8 +120,10 @@ public:
   inline FPoint unit() const { return (*this)/length(); }
 };
 inline FPoint operator+(float f,const FPoint& p) { return p+f; }
-inline FPoint operator-(float f,const FPoint& p) { return p-f; }
+inline FPoint operator-(float f,const FPoint& p) { return Point(f-p.x, f-p.y); }
 inline FPoint operator*(float f,const FPoint& p) { return p*f; }
+inline FPoint operator+(const Point &p, FPoint& q) { return FPoint(p.x+q.x, p.y+q.y); }
+inline FPoint operator-(const Point &p, FPoint& q) { return FPoint(p.x-q.x, p.y-q.y); }
 
 
 

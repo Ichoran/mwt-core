@@ -742,7 +742,7 @@ void Dancer::readyAnother8(Image8* fg, Image* bg, int frame, double time)
 
 
 // Actually look for a new blob
-bool Dancer::findAnother(bool best_guess,Mask* exclusion_mask)
+bool Dancer::findAnother(bool best_guess, Mask* exclusion_mask, FPoint jitter)
 {
   if (validated) {
 		return true;  // If we've already found one, we're done.
@@ -1274,6 +1274,89 @@ int Performance::initialRefs8(Image8 *fg, ManagedList<Point>& locations, double 
 }
 
 
+void Performance::calculateJitterDeltaSort(float delta, float *xedge, int &nxe, float *yedge, int &nye) {
+  float *eg;
+  int nv;
+  if (edge_profile.direction == Profile::OverY) {
+    eg = xedge;
+    nv = nxe;
+    nxe += 1;
+  }
+  else {
+    eg = yedge;
+    nv = nye;
+    nye += 1;
+  }
+  if (nv < 21) {
+    // Insertion sort from small side
+    while (nv > 0 && delta > eg[nv-1]) { eg[nv] = eg[nv-1]; nv--; }
+    eg[nv] = delta;
+  }
+  else if (eg[0] > delta && delta < eg[20]) {
+    int j;
+    if (nv & 1) {
+      // Half the time insertion sort from the right
+      for (j = 20; j > 0 && delta > eg[j]; j--) eg[j] = eg[j-1];
+    }
+    else {
+      // Half the time insertion sort from the left
+      for (j = 0; j < 20 && delta < eg[j]; j++) eg[j] = eg[j+1];
+    }
+    eg[j] = delta;
+  }
+}
+
+void Performance::calculateJitterGivenDeltaSorted(float *xedge, int nxe, float *yedge, int nye) {
+  float jx = 0;
+  float jy = 0;
+  if (nxe > 0) jx = (nxe&1) ? xedge[nxe/2] : 0.5*(xedge[nxe/2] + xedge[nxe/2 - 1]);
+  if (nye > 0) jy = (nye&1) ? yedge[nye/2] : 0.5*(yedge[nye/2] + yedge[nye/2 - 1]);
+  jitter.set(jx, jy);
+  if (fabsf(jx - ijitter.x) > 0.55) ijitter.x = (int)lrintf(jx);
+  if (fabsf(jy - ijitter.y) > 0.55) ijitter.y = (int)lrintf(jy);
+}
+
+void Performance::calculateJitter(Image *fg, ManagedList<Profile> &edges) {
+  if (edges.size == 0) {
+    jitter.set(0, 0);
+    ijitter.set(0, 0);
+    return;
+  }
+  float edge[44]; memset(edge, 0, sizeof(float)*44);
+  float *xedge = edge;
+  float *yedge = edge + 22;
+  int nxe = 0;
+  int nye = 0;
+  Listable<Profile> *lp = NULL;
+  for (edges.advance(lp); lp != NULL; edges.advance(lp)) {
+    edge_profile.imitate(lp->data);
+    auto delta = edge_profile.delta(*fg, &(lp->data));
+    if (isnan(delta)) continue;
+    calculateJitterDeltaSort(delta, xedge, nxe, yedge, nye);
+  }
+  calculateJitterGivenDeltaSorted(xedge, nxe, yedge, nye);
+}
+
+void Performance::calculateJitter8(Image8 *fg, ManagedList<Profile> &edges) {
+  if (edges.size == 0) {
+    jitter.set(0, 0);
+    ijitter.set(0, 0);
+    return;
+  }
+  float edge[44]; memset(edge, 0, sizeof(float)*44);
+  float *xedge = edge;
+  float *yedge = edge + 22;
+  int nxe = 0;
+  int nye = 0;
+  Listable<Profile> *lp = NULL;
+  for (edges.advance(lp); lp != NULL; edges.advance(lp)) {
+    edge_profile.imitate(lp->data);
+    auto delta = edge_profile.delta8(*fg, &(lp->data));
+    if (isnan(delta)) continue;
+    calculateJitterDeltaSort(delta, xedge, nxe, yedge, nye);
+  }
+  calculateJitterGivenDeltaSorted(xedge, nxe, yedge, nye);
+}
 
 // Get ready to load in data from the next image (return how many items there will be)
 int Performance::anticipateNext(double time)
@@ -1295,18 +1378,19 @@ bool Performance::findNextItemBounds(Rectangle& im_bound)
     case no_state:
       return false;
       break;
+
     case check_sitter:
       if (!sitters.advance())
       {
         load_state = check_dancer;
-        return findNextItemBounds(im_bound);
-        break;
+        return findNextItemBounds(im_bound);  // Recursive!
       }
       load_state = load_sitter;
       // Fall through!
     case load_sitter:
       im_bound = sitters.i().movie.t().findNextROI(NULL,sitters.i().border);
       break;
+
     case check_dancer:
       if (!dancers.advance())
       {
@@ -1319,6 +1403,7 @@ bool Performance::findNextItemBounds(Rectangle& im_bound)
     case load_dancer:
       im_bound = dancers.i().movie.t().findNextROI(background,dancers.i().border);
       break;
+
     case check_band:
       // Need braces to enclose new local variables on stack
       {
@@ -1376,9 +1461,11 @@ bool Performance::findNextItemBounds(Rectangle& im_bound)
 
       im_bound = band->getBounds();
       break;
+
 		case load_band:
 			im_bound = band->getBounds();
       break;
+
     case all_loaded:
     default:
       return false;
@@ -1457,28 +1544,28 @@ void Performance::loadNextSingleItem8(Image8* fg)
   
 
 // Load data into appropriate images--use the one-item-at-a-time routines above
-void Performance::readyNext(Image* fg, double time)
+void Performance::readyNext(Image* fg, ManagedList<Profile> &edges, double time)
 {
+  calculateJitter(fg, edges);
   anticipateNext(time);
   
+  fg->bounds -= ijitter;
   Rectangle single_bound;
-  while (findNextItemBounds(single_bound))
-  {
-    loadNextSingleItem(fg);
-  }
+  while (findNextItemBounds(single_bound)) loadNextSingleItem(fg);
+  fg->bounds += ijitter;
 }
 
 
 // Load data into appropriate images--use the one-item-at-a-time routines above
-void Performance::readyNext8(Image8* fg, double time)
+void Performance::readyNext8(Image8* fg, ManagedList<Profile> &edges, double time)
 {
+  calculateJitter8(fg, edges);
   anticipateNext(time);
   
+  fg->bounds -= ijitter;
   Rectangle single_bound;
-  while (findNextItemBounds(single_bound))
-  {
-    loadNextSingleItem8(fg);
-  }
+  while (findNextItemBounds(single_bound)) loadNextSingleItem8(fg);
+  fg->bounds += ijitter;
 }
 
 
@@ -1488,13 +1575,14 @@ int Performance::findNext()
 //       case of Dancers, causes output to written to predefined files.
 {
   bool found;
-  Dancer* d;  
+  Dancer* d;
+  FPoint jit = jitter - ijitter;
   
   // First get reference objects
   sitters.start();
   while(sitters.advance())
   {
-    found = sitters.i().findAnother(true,NULL);
+    found = sitters.i().findAnother(true, NULL, jit);
     if (found) sitters.i().validate();
     else sitters.i().invalidate();
     if (sit_fname!=NULL && current_frame<3) enableOutput(sitters.i(),true); // Only enable at beginning since we never lose these
@@ -1505,7 +1593,7 @@ int Performance::findNext()
   while (dancers.advance())
   {
     //printf("I found a dancer!  %d spans %d - %d\n", dancers.i().ID, dancers.i().frames.lo(), dancers.i().frames.hi());
-    found = dancers.i().findAnother(false,danger_zone);
+    found = dancers.i().findAnother(false, danger_zone, jit);
     if (!found)
     {
       if (dancers.i().candidates.size==0)  // Lost blob
@@ -2086,7 +2174,7 @@ int test_mwt_blob_dancer() // Doesn't test output--need Performance for that
   im.set( r1 , G );
   im.set( r2 , G/2 );
   d->readyAnother(&im , NULL , 2 , 0.04);
-  tf = d->findAnother(true,NULL);
+  tf = d->findAnother(true, NULL, FPoint(0, 0));
   if (tf==false) return 4;
   d->validate();
   if (d->movie.t().mask().pixel_count != r2.area()) return 5;
@@ -2169,6 +2257,8 @@ int test_mwt_blob_performance()
   
   if (n_refs!=1 || p->sitters.h().movie.h().mask().pixel_count!=r1.area()) return 7;
   if (n_blob!=1 || p->dancers.h().movie.h().mask().pixel_count!=r2.area()) return 8;
+
+  ManagedList<Profile> no_edges(2, true);
   
   bad = false;
   for (N=128;N<256;N++)
@@ -2182,7 +2272,7 @@ int test_mwt_blob_performance()
     im.set(r2,B/2);
     if (refs.size==0) refs.Append( saved_refs.h() );
     
-    p->readyNext(&im , 0.02*(N-127));
+    p->readyNext(&im , no_edges, 0.02*(N-127));
     i = p->findNext();
     if (i==0) bad=true;
     if ( (p->dancers.h().movie.t().data().centroid - 0.5*(FPoint(r2.far)+FPoint(r2.near))).length() > 2 ) bad = true;

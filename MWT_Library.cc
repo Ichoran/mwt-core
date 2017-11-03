@@ -570,6 +570,200 @@ int TrackerLibrary::setUpdateBandNumber(int handle,int n_bands)
 }
 
 
+// Common bounds etc. checking for edge detection
+int TrackerLibrary::checkInImageBounds(int handle, Rectangle &fromImage, Rectangle &search, Point &size) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  if (all_trackers[handle]->reference_edges_final) return -2;
+  if (size.x > search.width() || size.y > search.height()) return -3;
+  if (!fromImage.contains(search)) return -4;
+  return 0;
+}
+
+// Find a clean set of edges within a region to do automatic jitter-compensation during tracking
+// Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
+float TrackerLibrary::addBestXEdgesInImage(int handle, Image& im, Rectangle &search, Point &size) {
+  int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size), Profile::OverY);
+
+  float ans = p->best_inside(im, search);
+  if (p->n_features <= 0) {
+    te->reference_edges.Truncate();
+    return NAN;
+  }
+
+  return ans;
+}
+
+// Find a clean set of edges within a region to do automatic jitter-compensation during tracking
+// Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
+float TrackerLibrary::addBestYEdgesInImage(int handle, Image& im, Rectangle &search, Point &size) {
+  int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size), Profile::OverX);
+
+  float ans = p->best_inside(im, search);
+  if (p->n_features <= 0) {
+    te->reference_edges.Truncate();
+    return NAN;
+  }
+
+  return ans;
+}
+
+// Find a clean set of edges within a region to do automatic jitter-compensation during tracking
+// Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
+float TrackerLibrary::addBestXEdgesInImage8(int handle, Image8& im, Rectangle &search, Point &size) {
+  int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size), Profile::OverY);
+
+  float ans = p->best_inside8(im, search);
+  if (p->n_features <= 0) {
+    te->reference_edges.Truncate();
+    return NAN;
+  }
+
+  return ans;
+}
+
+// Find a clean set of edges within a region to do automatic jitter-compensation during tracking.
+// Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
+float TrackerLibrary::addBestYEdgesInImage8(int handle, Image8& im, Rectangle &search, Point &size) {
+  int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size), Profile::OverX);
+
+  float ans = p->best_inside8(im, search);
+  if (p->n_features <= 0) {
+    te->reference_edges.Truncate();
+    return NAN;
+  }
+
+  return ans;
+}
+
+// Gets the number of edge profiles already loaded
+int TrackerLibrary::loadedProfiles(int handle) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+
+  return all_trackers[handle]->reference_edges.size;
+}
+
+Profile* TrackerLibrary::getProfileIfValid(int handle, int profile) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return NULL;
+  if (all_trackers[handle]==NULL) return NULL;
+
+  TrackerEntry *te = all_trackers[handle];
+
+  if (profile < 0 || profile >= te->reference_edges.size) return NULL;
+
+  if (te->cached_profile_index != profile) {
+    te->cached_profile = &(te->reference_edges.index(profile));
+    te->cached_profile_index = profile;
+  }
+
+  return te->cached_profile;
+}
+
+// Gets the lower bound of the profile in the x direction
+int TrackerLibrary::profileCorner_x0(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->source.near.x;
+}
+
+// Gets the upper bound (inclusive) of the profile in the x direction.
+int TrackerLibrary::profileCorner_x1(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->source.far.x;
+}
+
+// Gets the lower bound of the profile in the y direction
+int TrackerLibrary::profileCorner_y0(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->source.near.y;
+
+}
+
+// Gets the upper bound (inclusive) of the profile in the y direction
+int TrackerLibrary::profileCorner_y1(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->source.far.y;
+}
+
+// Returns the number of edges associated with a particular profile
+int TrackerLibrary::profileEdgeCount(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->n_features;
+}
+
+// Returns the position of a particular edge in a particular profile, if it exists; NAN otherwise.
+float TrackerLibrary::profileEdgeLocation(int handle, int profile, int edge) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return NAN;
+  if (edge < 0 || edge >= p->n_features) return NAN;
+  return p->features[edge].position;
+}
+
+// Returns the strength of a particular edge in a particular profile, if it exists; NAN otherwise
+float TrackerLibrary::profileEdgeStrength(int handle, int profile, int edge) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return NAN;
+  if (edge < 0 || edge >= p->n_features) return NAN;
+  return p->features[edge].strength;
+}
+
+// Returns the polarity of a particular edge in a particular profile, if it exists; 0 otherwise.
+int TrackerLibrary::profileEdgePolarity(int handle, int profile, int edge) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return 0;
+  if (edge < 0 || edge >= p->n_features) return 0;
+  return p->features[edge].sign;
+}
+
+// Removes a particular profile (by index), if it exists.
+int TrackerLibrary::removeOneProfile(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  TrackerEntry *te = all_trackers[handle];
+  if (te->reference_edges_final) return -2;
+  Listable<Profile> *lp = NULL;
+  for (te->reference_edges.advance(lp); lp != NULL && &(lp->data) != p; te->reference_edges.advance(lp)) {}
+  if (lp == NULL) return -3;
+  te->reference_edges.Destroy(lp);
+  return 0;
+}
+
+// Removes all profiles.  Returns the number of profiles removed.
+int TrackerLibrary::removeAllProfiles(int handle) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+
+  TrackerEntry *te = all_trackers[handle];
+  if (te == NULL) return -1;
+
+  auto n_removed = te->reference_edges.size;
+  while (te->reference_edges.size > 0) te->reference_edges.Behead();
+  
+  return n_removed; 
+}
+
+
+
 // Set the intensity above or below which we will fill a reference object
 int TrackerLibrary::setRefIntensityThreshold(int handle,int intensity_low,int intensity_high)
 {
@@ -974,9 +1168,12 @@ int TrackerLibrary::loadImage(int handle,Image& im,float time)
     return 0;
   }
   
+  if (!te->reference_edges_final) te->reference_edges_final = true;
+
   im.divide_bg = te->performance.use_division;	
   Performance& p = te->performance;
-  p.readyNext(&im,time);
+  ManagedList<Profile> mlp(2, true);
+  p.readyNext(&im, mlp, time);
   te->image_loaded = true;
   te->statistics_ready = false;
   SummaryData* sd = new( te->summary.Append() ) SummaryData( p.current_frame , time , &te->eventstore );
@@ -1007,9 +1204,11 @@ int TrackerLibrary::loadImage8(int handle, Image8& im, float time)
     return 0;
   }
   
+  if (!te->reference_edges_final) te->reference_edges_final = true;
+
   im.divide_bg = te->performance.use_division;  
   Performance& p = te->performance;
-  p.readyNext8(&im,time);
+  p.readyNext8(&im, te->reference_edges, time);
   te->image_loaded = true;
   te->statistics_ready = false;
   SummaryData* sd = new( te->summary.Append() ) SummaryData( p.current_frame , time , &te->eventstore );

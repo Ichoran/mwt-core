@@ -62,12 +62,13 @@ public:
   int n_features;
   Rectangle source;
   Collapse direction;
-  float lateral_factor;
-  int border;
   int n;
+  int n_alloc;
 
+  Profile() : reference(NULL), squareref(NULL), buffer(NULL), hist(NULL), source(Rectangle(Point(1,1), Point(0,0))), n_alloc(0) {}
   Profile(const Rectangle src, Collapse dir);
   ~Profile() {
+    n_alloc = 0;
     if (reference != NULL) { 
       delete[] reference; 
       reference = NULL;
@@ -104,6 +105,8 @@ private:
   void constrain_bounds_nearby(Rectangle &bounds);
 public:
 
+  /** Sets the same bounds as used by a different profile but reset the edges (ready for a fresh scan) */
+  void imitate(const Profile& that);
 
   /** Quality score for how useful of a profile we have for alignment */
   float quality();

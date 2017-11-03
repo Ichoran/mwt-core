@@ -18,6 +18,7 @@
 #include "MWT_Lists.h"
 #include "MWT_Storage.h"
 #include "MWT_Image.h"
+#include "MWT_Align.h"
 #include "MWT_Blob.h"
 #include "MWT_Model.h"
 
@@ -84,9 +85,12 @@ class TrackerEntry
 public:
   Performance performance;
   Listable<int> *handle;
+  ManagedList<Profile> reference_edges;
   ManagedList<Point> reference_objects;
   ManagedList<Point> working;
   
+  Profile *cached_profile;
+  int cached_profile_index;
   char* tracker_string;
   char* path_string;
   char* prefix_string;
@@ -102,6 +106,7 @@ public:
   bool image_info_known;
   bool output_info_known;
   bool border_size_known;
+  bool reference_edges_final;
   bool reference_intensities_known;
   bool object_intensities_known;
   bool object_sizes_known;
@@ -122,13 +127,15 @@ public:
     : handle(NULL),tracker_string(NULL),path_string(NULL),prefix_string(NULL),eventstore(0),summary(0)
   { }
   TrackerEntry(Listable<int> *new_handle,int buffer_size)  // Call this one using placement new 
-    : performance(new_handle->data,buffer_size),handle(new_handle),reference_objects(16,false),working(16,false),
+    : performance(new_handle->data,buffer_size),handle(new_handle),reference_edges(16,true),reference_objects(16,false),working(16,false),
+      cached_profile(NULL),cached_profile_index(-1),
       tracker_string(NULL),path_string(NULL),prefix_string(NULL),output_date(NULL),
       update_frequency(1.0),eventstore(buffer_size,false) , summary(buffer_size,true)
   {
     image_info_known = false;
     output_info_known = false;
     border_size_known = false;
+    reference_edges_final = false;
     reference_intensities_known = false;
     object_intensities_known = false;
     object_sizes_known = false;
@@ -225,6 +232,29 @@ public:
   int resizeRescale8(int handle,Image8& source,Image8& dest,Rectangle dest_selection);
   int resizeRescaleMemory8(int handle,Image8& dest,Rectangle dest_selection);
   int resizeRescaleFixed8(int handle,Image8& dest,Rectangle dest_selection);
+
+  // Finding edges for jitter alignment
+private:
+  int checkInImageBounds(int handle, Rectangle &fromImage, Rectangle &search, Point &size);
+public:
+  float addBestXEdgesInImage(int handle, Image& im, Rectangle &search, Point &size);
+  float addBestYEdgesInImage(int handle, Image& im, Rectangle &search, Point &size);
+  float addBestXEdgesInImage8(int handle, Image8& im, Rectangle &search, Point &size);
+  float addBestYEdgesInImage8(int handle, Image8& im, Rectangle &search, Point &size);
+  int loadedProfiles(int handle);
+private:
+  Profile* getProfileIfValid(int handle, int profile);
+public:
+  int profileCorner_x0(int handle, int profile);
+  int profileCorner_x1(int handle, int profile);
+  int profileCorner_y0(int handle, int profile);
+  int profileCorner_y1(int handle, int profile);
+  int profileEdgeCount(int handle, int profile);
+  float profileEdgeLocation(int handle, int profile, int edge);
+  float profileEdgeStrength(int handle, int profile, int edge);
+  int profileEdgePolarity(int handle, int profile, int edge);
+  int removeOneProfile(int handle, int profile);
+  int removeAllProfiles(int handle);
   
   // Preparing and getting feedback on reference objects
   int setRefIntensityThreshold(int handle,int intensity_low,int intensity_high);

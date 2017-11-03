@@ -98,6 +98,12 @@ int test_mwt_storage_list()
     if ((i&0x3)==0) mld->Backspace();
   }
   if (mld->size != (1536*3)/4) return 2;
+
+  if (&(mld->h()) != &(mld->index(0))) return 3;
+  if (&(mld->t()) != &(mld->index(mld->size-1))) return 4;
+  if (&(mld->h()) != &(mld->index(-100))) return 5;
+  if (&(mld->t()) != &(mld->index(2048))) return 6;
+  if (&(mld->list_head->next->next->next->data) != &(mld->index(3))) return 7;
   
   ManagedList<double> *mld2 = new ManagedList<double>(512);
   mld2->imitate(*mld);
@@ -109,7 +115,7 @@ int test_mwt_storage_list()
     else d = d*d*d;
     mld2->Push(d);
   }
-  if (mld2->size != 512+(1536*3)/4) return 3;
+  if (mld2->size != 512+(1536*3)/4) return 8;
   while (mld2->size>0){  mld->Push( mld2->h() ); mld2->Behead(); }
   delete mld2;
   mld->mergeSort();
@@ -117,7 +123,7 @@ int test_mwt_storage_list()
   {
     if (mld->current->next!=NULL)
     {
-      if (mld->current->next->data < mld->i()) return 4;
+      if (mld->current->next->data < mld->i()) return 9;
     }
   }
   delete mld;
