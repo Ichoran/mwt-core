@@ -49,6 +49,10 @@ public:
   float dancer_relativeaspect;
   float dancer_endwiggle;
   float dancer_pixelcount;
+  float dancer_jitter_x;
+  float dancer_jitter_y;
+  int dancer_shift_x;
+  int dancer_shift_y;
 	
   int n_speed_updates;
   float update_frequency;
@@ -64,6 +68,7 @@ public:
       dancer_width(0.0),dancer_relativewidth(0.0),
       dancer_aspect(0.0),dancer_relativeaspect(0.0),
       dancer_endwiggle(0.0),dancer_pixelcount(0.0),
+      dancer_jitter_x(0.0),dancer_jitter_y(0.0),dancer_shift_x(0),dancer_shift_y(0),
       n_speed_updates(0),update_frequency(1.0),
       event_list(listore)
   { }
@@ -235,12 +240,12 @@ public:
 
   // Finding edges for jitter alignment
 private:
-  int checkInImageBounds(int handle, Rectangle &fromImage, Rectangle &search, Point &size);
+  int checkInImageBounds(int handle, const Rectangle &fromImage, const Rectangle &search, const Point &size);
 public:
-  float addBestXEdgesInImage(int handle, Image& im, Rectangle &search, Point &size);
-  float addBestYEdgesInImage(int handle, Image& im, Rectangle &search, Point &size);
-  float addBestXEdgesInImage8(int handle, Image8& im, Rectangle &search, Point &size);
-  float addBestYEdgesInImage8(int handle, Image8& im, Rectangle &search, Point &size);
+  float addBestXEdgesInImage(int handle, Image& im, const Rectangle &search, const Point &size);
+  float addBestYEdgesInImage(int handle, Image& im, const Rectangle &search, const Point &size);
+  float addBestXEdgesInImage8(int handle, Image8& im, const Rectangle &search, const Point &size);
+  float addBestYEdgesInImage8(int handle, Image8& im, const Rectangle &search, const Point &size);
   int loadedProfiles(int handle);
 private:
   Profile* getProfileIfValid(int handle, int profile);

@@ -1328,7 +1328,7 @@ void Performance::calculateJitter(Image *fg, ManagedList<Profile> &edges) {
   int nxe = 0;
   int nye = 0;
   Listable<Profile> *lp = NULL;
-  for (edges.advance(lp); lp != NULL; edges.advance(lp)) {
+  while (edges.advance(lp)) {
     edge_profile.imitate(lp->data);
     auto delta = edge_profile.delta(*fg, &(lp->data));
     if (isnan(delta)) continue;
@@ -1349,7 +1349,7 @@ void Performance::calculateJitter8(Image8 *fg, ManagedList<Profile> &edges) {
   int nxe = 0;
   int nye = 0;
   Listable<Profile> *lp = NULL;
-  for (edges.advance(lp); lp != NULL; edges.advance(lp)) {
+  while (edges.advance(lp)) {
     edge_profile.imitate(lp->data);
     auto delta = edge_profile.delta8(*fg, &(lp->data));
     if (isnan(delta)) continue;
@@ -2334,4 +2334,3 @@ int main(int argc,char *argv[])
   return i>0;
 }
 #endif
-

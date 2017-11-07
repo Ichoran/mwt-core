@@ -32,7 +32,17 @@ void SummaryData::fprint(FILE* f , ManagedList<BlobOriginFate>& mlbof , ManagedL
     if(!mlbf.advance()) mlbf.current = NULL;
   }
   char last_character='\n';
-  if (event_list.size>0 || (mlbof.current!=NULL && mlbof.i().frame==frame_number) || (mlbf.current!=NULL && mlbf.i().frame==frame_number) ) last_character = ' ';
+  if (
+    event_list.size > 0 ||
+    (mlbof.current!=NULL && mlbof.i().frame==frame_number) ||
+    (mlbf.current!=NULL && mlbf.i().frame==frame_number)
+#ifndef NO_DEJITTER
+    || dancer_jitter_x != 0 || dancer_jitter_y != 0
+    || dancer_shift_x != 0 || dancer_shift_y != 0
+#endif
+  ) {
+    last_character = ' ';
+  }
   
   fprintf(f,"%d %.3f  %d %d %.1f  %.2f %.3f  %.1f %.3f  %.1f %.3f  %.3f %.3f  %.3f %.3f%c",
     frame_number,frame_time,
@@ -69,6 +79,11 @@ void SummaryData::fprint(FILE* f , ManagedList<BlobOriginFate>& mlbof , ManagedL
       if( !mlbf.advance()) mlbf.current=NULL;
     }
   }
+#ifndef NO_DEJITTER
+  if (dancer_jitter_x != 0 || dancer_jitter_y != 0 || dancer_shift_x != 0 || dancer_shift_y != 0) {
+    fprintf(f, " @ %.3f %.3f  %d %d", dancer_jitter_x, dancer_jitter_y, dancer_shift_x, dancer_shift_y);
+  }
+#endif
   if (last_character!='\n') fprintf(f,"\n");
 }
 
@@ -571,7 +586,7 @@ int TrackerLibrary::setUpdateBandNumber(int handle,int n_bands)
 
 
 // Common bounds etc. checking for edge detection
-int TrackerLibrary::checkInImageBounds(int handle, Rectangle &fromImage, Rectangle &search, Point &size) {
+int TrackerLibrary::checkInImageBounds(int handle, const Rectangle &fromImage, const Rectangle &search, const Point &size) {
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
   if (all_trackers[handle]->reference_edges_final) return -2;
@@ -582,7 +597,7 @@ int TrackerLibrary::checkInImageBounds(int handle, Rectangle &fromImage, Rectang
 
 // Find a clean set of edges within a region to do automatic jitter-compensation during tracking
 // Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
-float TrackerLibrary::addBestXEdgesInImage(int handle, Image& im, Rectangle &search, Point &size) {
+float TrackerLibrary::addBestXEdgesInImage(int handle, Image& im, const Rectangle &search, const Point &size) {
   int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
   
   TrackerEntry* te = all_trackers[handle];
@@ -600,7 +615,7 @@ float TrackerLibrary::addBestXEdgesInImage(int handle, Image& im, Rectangle &sea
 
 // Find a clean set of edges within a region to do automatic jitter-compensation during tracking
 // Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
-float TrackerLibrary::addBestYEdgesInImage(int handle, Image& im, Rectangle &search, Point &size) {
+float TrackerLibrary::addBestYEdgesInImage(int handle, Image& im, const Rectangle &search, const Point &size) {
   int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
   
   TrackerEntry* te = all_trackers[handle];
@@ -618,7 +633,7 @@ float TrackerLibrary::addBestYEdgesInImage(int handle, Image& im, Rectangle &sea
 
 // Find a clean set of edges within a region to do automatic jitter-compensation during tracking
 // Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
-float TrackerLibrary::addBestXEdgesInImage8(int handle, Image8& im, Rectangle &search, Point &size) {
+float TrackerLibrary::addBestXEdgesInImage8(int handle, Image8& im, const Rectangle &search, const Point &size) {
   int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
   
   TrackerEntry* te = all_trackers[handle];
@@ -636,7 +651,7 @@ float TrackerLibrary::addBestXEdgesInImage8(int handle, Image8& im, Rectangle &s
 
 // Find a clean set of edges within a region to do automatic jitter-compensation during tracking.
 // Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
-float TrackerLibrary::addBestYEdgesInImage8(int handle, Image8& im, Rectangle &search, Point &size) {
+float TrackerLibrary::addBestYEdgesInImage8(int handle, Image8& im, const Rectangle &search, const Point &size) {
   int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
   
   TrackerEntry* te = all_trackers[handle];
@@ -1172,8 +1187,7 @@ int TrackerLibrary::loadImage(int handle,Image& im,float time)
 
   im.divide_bg = te->performance.use_division;	
   Performance& p = te->performance;
-  ManagedList<Profile> mlp(2, true);
-  p.readyNext(&im, mlp, time);
+  p.readyNext(&im, te->reference_edges, time);
   te->image_loaded = true;
   te->statistics_ready = false;
   SummaryData* sd = new( te->summary.Append() ) SummaryData( p.current_frame , time , &te->eventstore );
@@ -1378,6 +1392,10 @@ int TrackerLibrary::processImage(int handle)
   sd.dancer_aspect = aspect.mean();
   sd.dancer_relativeaspect = rel_aspect.mean();
   sd.dancer_pixelcount = pixelcount.mean();
+  sd.dancer_jitter_x = te->performance.jitter.x;
+  sd.dancer_jitter_y = te->performance.jitter.y;
+  sd.dancer_shift_x = te->performance.ijitter.x;
+  sd.dancer_shift_y = te->performance.ijitter.y;
   if (sd.n_speed_updates * sd.update_frequency < sd.frame_time)
   {
     sd.n_speed_updates = (int)ceil( sd.frame_time / sd.update_frequency );
@@ -1935,12 +1953,22 @@ int test_mwt_library(int bin)
   for (int j=0;j<4;j++)
   {
     arena = (3*W)/4;
+    arena.set(Rectangle(Point(0, 0), Point(15, 15)), W/3);
     worm1.imprint(arena,m,0.5,2);
     worm2.imprint(arena,m,0.5,2);
     worm3.imprint(arena,m,0.5,2);
     arena.set( Rectangle( Point(33,256+215) , Point(36,256+222) ) , W/3 );
     arena8.copy16(arena, true);
     arena.copy8(arena8, true);
+    if (j==0) {
+      Rectangle where(Point(4, 4), Point(23, 23));
+      auto q1x = a_library.addBestXEdgesInImage(h1, arena, where, Point(8, 4));
+      auto q1y = a_library.addBestYEdgesInImage(h1, arena, where, Point(4, 8));
+      auto q3x = a_library.addBestXEdgesInImage8(h3, arena8, where, Point(8, 4));
+      auto q3y = a_library.addBestYEdgesInImage8(h3, arena8, where, Point(4, 8));
+      printf("Edge quality: %f %f and %f %f\n", q1x, q1y, q3x, q3y);
+    }
+
     for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
       unsigned short u = arena.get(x,y);
       unsigned short v = arena8.get(x,y);
@@ -1993,7 +2021,7 @@ int test_mwt_library(int bin)
     worm2.wiggle(0.4);
     worm3.wiggle(0.4);
   }
-  
+
   // Make sure error-checking is working; shouldn't be able to process images without loading them!
   i = a_library.processImage(h1); if (i!=0) return 33;
   i = a_library.processImage(h2); if (i!=0) return 34;
@@ -2018,6 +2046,7 @@ int test_mwt_library(int bin)
   for (int j=0;j<96;j++)
   {
     arena = (W*3)/4;
+    arena.set(Rectangle(Point(0, 0), Point(15 + (j%2), 15 + ((j%3)-1))), W/3);
     worm1.imprint(arena,m,0.4,2);
     worm2.imprint(arena,m,0.4,2);
     worm3.imprint(arena,m,0.4,2);
@@ -2092,7 +2121,7 @@ int test_mwt_library(int bin)
       i = a_library.markEvent(h4,1); if (i!=h4) return 144;
       i = a_library.markEvent(h3,2); if (i!=h3) return 145;
     }
-    
+
     i = a_library.processImage(h1); if (i<2 || i>3) return 46;
     i = a_library.processImage(h2); if (i != 0) return 47;
     i = a_library.processImage(h3); if (i<2 || i>3) return 146;
@@ -2158,6 +2187,8 @@ int test_mwt_library(int bin)
   
   i = a_library.complete(h1); if (i!=h1) return 50;
   i = a_library.complete(h2); if (i!=h2) return 51;
+  i = a_library.complete(h3); if (i!=h3) return 52;
+  i = a_library.complete(h4); if (i!=h4) return 53;
   
   return 0;
 }
