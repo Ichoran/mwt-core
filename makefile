@@ -7,12 +7,12 @@ SHELL=/bin/bash
 FLAGS = -Wall -O2 -fno-strict-aliasing -ggdb3
 
 ifeq ($(OS),Windows_NT)
-    CC = mingw32-g++ -std=gnu++11
+    CC = mingw32-g++ -std=gnu++14
     OUTDIR = lib
     TGT = -DWINDOWS -DENABLE_SIMD
 else
-    CC = g++ -std=gnu++11
-#   CC = clang++ -std=c++11 -DCLANG_WORKAROUND
+    CC = g++ -std=gnu++14
+#   CC = clang++ -std=c++14 -DCLANG_WORKAROUND
     TGT = -DLINUX -DENABLE_SIMD
 endif
 
