@@ -646,6 +646,17 @@ public:
   inline T& t() { return list_tail->data; }
   inline T& i() { return current->data; }
   inline T& ii(Listable<T>* lt) { return lt->data; }  // Syntactic sugar for separate iterator
+
+  // Indexed access--linear, slow!  Try to not use this!
+  T& index(int j) {
+    Listable<T>* lt = NULL;
+    advance(lt);
+    while (j > 0 && lt->next != NULL) {
+      advance(lt);
+      j--;
+    }
+    return ii(lt);
+  }
   
   // Merge sorts using < or function pointer
   inline void mergeSort() { Listable<T>::mergeSort(list_head,list_tail); }

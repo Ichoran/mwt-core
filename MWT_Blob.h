@@ -19,6 +19,7 @@
 #include "MWT_Lists.h"
 #include "MWT_Storage.h"
 #include "MWT_Image.h"
+#include "MWT_Align.h"
 
 #define NUM_PTS_TO_SAMPLE 100
 
@@ -155,13 +156,14 @@ public:
   int pixel_count;  // Will be lost from stats when history is cleared, so keep it here
   Dancer* dancer;   // We will use member variables from dancer in order to avoid duplicating them each frame
   Listable<FloodData>* stats; // We'll only have one, but we make it listable so we can just grab it from the floodfill list
+  FPoint jitter;    // Jitter in the image
   Image *im;
   Listable<Contour>* skeleton; // Listable for easier disposal
   Listable<Contour>* outline; // Listable for easier disposal
   Listable<PackedContour>* packedline;  // Listable for easier disposal
   
   
-  Blob(int F=0,double T=0.0) : frame(F),time(T),pixel_count(0),dancer(NULL),stats(NULL),im(NULL),skeleton(NULL),outline(NULL),packedline(NULL) { }
+  Blob(int F=0,double T=0.0) : frame(F),time(T),pixel_count(0),dancer(NULL),stats(NULL),jitter(0,0),im(NULL),skeleton(NULL),outline(NULL),packedline(NULL) { }
   ~Blob();
   
   inline FloodData& data() { return stats->data; }
@@ -297,7 +299,7 @@ public:
   Blob* makeFirst(int frame,double time);
   void readyAnother(Image *fg,Image *bg,int frame,double time);
   void readyAnother8(Image8 *fg, Image *bg, int frame, double time);
-  bool findAnother(bool best_guess,Mask* exclusion_mask);
+  bool findAnother(bool best_guess, Mask* exclusion_mask, FPoint jitter);
   void validate();
   void invalidate();
   
@@ -339,6 +341,9 @@ public:
   int border;
   bool find_dancer_skel;
   bool find_dancer_edge;
+  FPoint jitter;
+  Point ijitter;
+  Profile edge_profile;
   
   // Default data retention/saving policies
   int n_keep_full;
@@ -405,6 +410,9 @@ public:
     border(2),
     find_dancer_skel(false),
     find_dancer_edge(false),
+    jitter(0, 0),
+    ijitter(0, 0),
+    edge_profile(Rectangle(0, 0, 0, 0), Profile::OverX),
 
     // Data retention/saving
     n_keep_full(2),
@@ -487,12 +495,18 @@ public:
   int initialScan8(Image8 *fg, double time);
   int initialRefs8(Image8 *fg, ManagedList<Point>& locations, double time);
   
+private:
+  void calculateJitterDeltaSort(float delta, float *xedge, int &nxe, float *yedge, int &nye);
+  void calculateJitterGivenDeltaSorted(float *xedge, int nxe, float *yedge, int nye);
+public:
+  void calculateJitter(Image* fg, ManagedList<Profile> &edges);
+  void calculateJitter8(Image8* fg, ManagedList<Profile> &edges);
   int anticipateNext(double time);
   bool findNextItemBounds(Rectangle& im_bound);
   void loadNextSingleItem(Image* fg);
   void loadNextSingleItem8(Image8* fg);
-  void readyNext(Image *fg, double time);
-  void readyNext8(Image8 *fg, double time);
+  void readyNext(Image *fg, ManagedList<Profile> &edges, double time);
+  void readyNext8(Image8 *fg, ManagedList<Profile> &edges, double time);
   int findNext();
   
 	// Image correction 

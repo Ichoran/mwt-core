@@ -28,6 +28,7 @@ public:
   Point(int X,int Y) : x(X),y(Y) { }
   
   Point dup() const { return Point(*this); }
+  Point swap() const { return Point(y, x); }
   
   inline bool operator==(const Point& p) const { return (x==p.x && y==p.y); }
   inline bool operator!=(const Point& p) const { return (x!=p.x || y!=p.y); }
@@ -39,6 +40,8 @@ public:
   inline Point& operator-=(int i) { x-=i; y-=i; return *this; }
   inline Point& operator*=(int i) { x*=i; y*=i; return *this; }
   inline Point& operator/=(int i) { x/=i; y/=i; return *this; }
+
+  inline Point& set(int a, int b) { x = a; y = b; return *this; }
   
   inline Point operator+(const Point& p) const { return Point(x+p.x,y+p.y); }
   inline Point operator+(int i) const { return Point(x+i,y+i); }
@@ -60,7 +63,7 @@ public:
   inline int length2() const { return x*x + y*y; }
 };
 inline Point operator+(int i,const Point& p) { return p+i; }
-inline Point operator-(int i,const Point& p) { return p-i; }
+inline Point operator-(int i,const Point& p) { return Point(i - p.x, i - p.y); }
 inline Point operator*(int i,const Point &p) { return p*i; }
 
 
@@ -77,7 +80,8 @@ public:
   FPoint(const Point &p) : x(p.x),y(p.y) { }
   
   FPoint dup() const { return FPoint(*this); }
-  Point toPoint() const { return Point( (int)floor(x+0.5) , (int)floor(y+0.5) ); }
+  FPoint swap() const { return FPoint(y, x); }
+  Point toPoint() const { return Point( (int)lrintf(x) , (int)lrintf(y) ); }
   
   inline bool operator==(const FPoint& p) const { return (x==p.x && y==p.y); }
   inline bool operator!=(const FPoint& p) const { return (x!=p.x || y!=p.y); }
@@ -90,10 +94,14 @@ public:
   inline FPoint& operator*=(float f) { x*=f; y*=f; return *this; }
   inline FPoint& operator/=(float f) { x/=f; y/=f; return *this; }
 
+  inline FPoint& set(float a, float b) { x = a; y = b; return *this; }
+
   inline FPoint operator+(const FPoint &p) const { return FPoint(x+p.x,y+p.y); }
+  inline FPoint operator+(const Point &p) const { return FPoint(x+p.x, y+p.y); }
   inline FPoint operator+(float f) const { return FPoint(x+f,y+f); }
   inline FPoint operator-() const { return FPoint(-x,-y); }
   inline FPoint operator-(const FPoint &p) const { return FPoint(x-p.x,y-p.y); }
+  inline FPoint operator-(const Point &p) const { return FPoint(x-p.x, y-p.y); }
   inline FPoint operator-(float f) const { return FPoint(x-f,y-f); }
   inline float operator*(const FPoint &p) const { return x*p.x + y*p.y; }
   inline FPoint operator*(float i) const { return FPoint(i*x,i*y); }
@@ -112,8 +120,10 @@ public:
   inline FPoint unit() const { return (*this)/length(); }
 };
 inline FPoint operator+(float f,const FPoint& p) { return p+f; }
-inline FPoint operator-(float f,const FPoint& p) { return p-f; }
+inline FPoint operator-(float f,const FPoint& p) { return Point(f-p.x, f-p.y); }
 inline FPoint operator*(float f,const FPoint& p) { return p*f; }
+inline FPoint operator+(const Point &p, FPoint& q) { return FPoint(p.x+q.x, p.y+q.y); }
+inline FPoint operator-(const Point &p, FPoint& q) { return FPoint(p.x-q.x, p.y-q.y); }
 
 
 
@@ -141,7 +151,8 @@ public:
   Rectangle(Point A,Point B) : near(A),far(B) { }
   Rectangle(int L,int R,int B,int U) : near(L,B),far(R,U) { }
   
-  Rectangle dup() const { return Rectangle(near,far); }
+  Rectangle dup() const { return Rectangle(near, far); }
+  Rectangle swap() const { return Rectangle(near.swap(), far.swap()); }
   
   inline bool operator<(const Rectangle& r) const { return (near.x<r.near.x || (near.x==r.near.x && near.y<r.near.y)); }
   inline bool operator==(const Rectangle& r) const { return near==r.near && far==r.far; }
@@ -192,6 +203,8 @@ public:
   inline Rectangle& cropTo(const Rectangle& r) { return (*this) *= r; }
   inline Rectangle& expand(int i) { near-=i; far+=i; return *this; }
   inline Rectangle& adoptOrigin(const Point& p) { near -= p; far -= p; return *this; }
+  inline Rectangle& nearTo(const Point& p) { far -= near; far += p; near = p; return *this; }
+  inline Rectangle& farTo(const Point& p) { near -= far; near += p; far = p; return *this; }
   
   inline Rectangle operator+(const Point& p) const { return Rectangle(near+p,far+p); }
   inline Rectangle operator-(const Point& p) const { return Rectangle(near-p,far-p); }

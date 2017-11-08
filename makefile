@@ -9,15 +9,15 @@ FLAGS = -Wall -O2 -fno-strict-aliasing -ggdb3
 ifeq ($(OS),Windows_NT)
     CC = mingw32-g++ -std=gnu++11
     OUTDIR = lib
-    TGT = -DWINDOWS 
+    TGT = -DWINDOWS -DENABLE_SIMD
 else
     CC = g++ -std=gnu++11
 #   CC = clang++ -std=c++11 -DCLANG_WORKAROUND
-    TGT = -DLINUX
+    TGT = -DLINUX -DENABLE_SIMD
 endif
 
 UNIT = -DUNIT_TEST_OWNER
-all: unit_geometry unit_lists unit_storage unit_image unit_blob unit_model unit_library
+all: unit_geometry unit_lists unit_storage unit_image unit_align unit_blob unit_model unit_library
 
 unit_geometry: makefile MWT_Geometry.h MWT_Geometry.cc
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_geometry MWT_Geometry.cc
@@ -29,7 +29,7 @@ unit_lists: makefile MWT_Lists.h MWT_Lists.cc MWT_Geometry.h
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_lists MWT_Lists.cc
 
 MWT_Lists.o: makefile MWT_Lists.h MWT_Lists.cc MWT_Geometry.h
-	$(CC) $(FLAGS) $(TGT) -o MWT_Lists.o MWT_Lists.cc
+	$(CC) $(FLAGS) $(TGT) -o MWT_Lists.o MWT_Lists.c
 	
 unit_storage: makefile MWT_Storage.h MWT_Storage.cc MWT_Lists.h
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_storage MWT_Storage.cc
@@ -40,11 +40,17 @@ MWT_Image.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_I
 unit_image: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.cc
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_image MWT_Image.cc
 
-MWT_Blob.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Blob.h MWT_Blob.cc
+MWT_Align.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Align.h MWT_Align.cc
+	$(CC) $(FLAGS) $(TGT) -c -o MWT_Align.o MWT_Align.cc
+
+unit_align: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Align.h MWT_Align.cc
+	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_align MWT_Align.cc MWT_Image.o
+
+MWT_Blob.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Align.h MWT_Blob.h MWT_Blob.cc
 	$(CC) $(FLAGS) $(TGT) -c -o MWT_Blob.o MWT_Blob.cc
 
-unit_blob: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Blob.h MWT_Blob.cc
-	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_blob MWT_Blob.cc MWT_Image.o
+unit_blob: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Align.o MWT_Blob.h MWT_Blob.cc
+	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_blob MWT_Blob.cc MWT_Image.o MWT_Align.o
 	
 MWT_Model.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Model.h MWT_Model.cc
 	$(CC) $(FLAGS) $(TGT) -c -o MWT_Model.o MWT_Model.cc
@@ -52,18 +58,18 @@ MWT_Model.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_I
 unit_model: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Model.h MWT_Model.cc
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_model MWT_Model.cc MWT_Image.o
 
-unit_library: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Blob.h MWT_Blob.o MWT_Model.h MWT_Model.o MWT_Library.h MWT_Library.cc
-	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_library MWT_Library.cc MWT_Image.o MWT_Blob.o MWT_Model.o
-
-MWT_Library.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Blob.h MWT_Model.h MWT_Library.h MWT_Library.cc
+MWT_Library.o: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Align.h MWT_Blob.h MWT_Model.h MWT_Library.h MWT_Library.cc
 	$(CC) $(FLAGS) $(TGT) -c -o MWT_Library.o MWT_Library.cc
 
-mwt_bench: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Blob.h MWT_Library.h MWT_Model.h MWT_Bench.cc MWT_Library.o MWT_Model.o MWT_Blob.o MWT_Image.o
-	$(CC) $(FLAGS) $(TGT) -o mwt_bench MWT_Bench.cc MWT_Library.o MWT_Model.o MWT_Blob.o MWT_Image.o
+unit_library: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Align.h MWT_Align.o MWT_Blob.h MWT_Blob.o MWT_Model.h MWT_Model.o MWT_Library.h MWT_Library.cc
+	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_library MWT_Library.cc MWT_Image.o MWT_Align.o MWT_Blob.o MWT_Model.o
+
+mwt_bench: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Align.h MWT_Blob.h MWT_Library.h MWT_Model.h MWT_Bench.cc MWT_Library.o MWT_Model.o MWT_Blob.o MWT_Align.o MWT_Image.o
+	$(CC) $(FLAGS) $(TGT) -o mwt_bench MWT_Bench.cc MWT_Library.o MWT_Model.o MWT_Blob.o MWT_Align.o MWT_Image.o
 
 ifeq ($(OS),Windows_NT)
-    DLL: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Blob.h MWT_Blob.o MWT_Model.h MWT_Model.o MWT_Library.h MWT_Library.o MWT_DLL.h MWT_DLL.cc
-		mkdir -p lib; $(CC) -shared -static -static-libstdc++ -static-libgcc $(FLAGS) $(TGT) -o $(OUTDIR)/MWT.dll MWT_DLL.cc MWT_Image.o MWT_Blob.o MWT_Model.o MWT_Library.o
+    DLL: makefile MWT_Storage.h MWT_Geometry.h MWT_Lists.h MWT_Image.h MWT_Image.o MWT_Align.h MWT_Align.o MWT_Blob.h MWT_Blob.o MWT_Model.h MWT_Model.o MWT_Library.h MWT_Library.o MWT_DLL.h MWT_DLL.cc
+		mkdir -p lib; $(CC) -shared -static -static-libstdc++ -static-libgcc $(FLAGS) $(TGT) -o $(OUTDIR)/MWT.dll MWT_DLL.cc MWT_Image.o MWT_Align.o MWT_Blob.o MWT_Model.o MWT_Library.o
 endif
 
 test: all
@@ -71,6 +77,7 @@ test: all
 	./unit_lists
 	./unit_storage
 	./unit_image
+	./unit_align
 	./unit_blob
 	./unit_model
 	./unit_library
@@ -82,11 +89,14 @@ grind: unit_library
 	valgrind --leak-check=full --error-exitcode=2 ./unit_library -quiet
 
 clean:
-	rm -f unit_geometry unit_lists unit_storage unit_image unit_blob unit_model unit_library
+	rm -f unit_geometry unit_lists unit_storage unit_image unit_align unit_blob unit_model unit_library mwt_bench
 	rm -f test_image.tiff performance_imprint.tiff worm_imprint.tiff worm_noisy.tiff
 	rm -f test_blob.log
 	rm -f *.o
 	rm -f test*.tiff
+	rm -f at*.tiff
+	rm -f fg*.tiff bg*.tiff
+	rm -f performance*.tiff
 	rm -f 20071226_105033/*
 	rm -f 20071212_130514/*
 	if [ -a 20071226_105033 ]; then rmdir 20071226_105033; fi

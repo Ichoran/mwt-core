@@ -32,7 +32,17 @@ void SummaryData::fprint(FILE* f , ManagedList<BlobOriginFate>& mlbof , ManagedL
     if(!mlbf.advance()) mlbf.current = NULL;
   }
   char last_character='\n';
-  if (event_list.size>0 || (mlbof.current!=NULL && mlbof.i().frame==frame_number) || (mlbf.current!=NULL && mlbf.i().frame==frame_number) ) last_character = ' ';
+  if (
+    event_list.size > 0 ||
+    (mlbof.current!=NULL && mlbof.i().frame==frame_number) ||
+    (mlbf.current!=NULL && mlbf.i().frame==frame_number)
+#ifndef NO_DEJITTER
+    || dancer_jitter_x != 0 || dancer_jitter_y != 0
+    || dancer_shift_x != 0 || dancer_shift_y != 0
+#endif
+  ) {
+    last_character = ' ';
+  }
   
   fprintf(f,"%d %.3f  %d %d %.1f  %.2f %.3f  %.1f %.3f  %.1f %.3f  %.3f %.3f  %.3f %.3f%c",
     frame_number,frame_time,
@@ -69,6 +79,11 @@ void SummaryData::fprint(FILE* f , ManagedList<BlobOriginFate>& mlbof , ManagedL
       if( !mlbf.advance()) mlbf.current=NULL;
     }
   }
+#ifndef NO_DEJITTER
+  if (dancer_jitter_x != 0 || dancer_jitter_y != 0 || dancer_shift_x != 0 || dancer_shift_y != 0) {
+    fprintf(f, " @ %.3f %.3f  %d %d", dancer_jitter_x, dancer_jitter_y, dancer_shift_x, dancer_shift_y);
+  }
+#endif
   if (last_character!='\n') fprintf(f,"\n");
 }
 
@@ -570,6 +585,207 @@ int TrackerLibrary::setUpdateBandNumber(int handle,int n_bands)
 }
 
 
+// Common bounds etc. checking for edge detection
+int TrackerLibrary::checkInImageBounds(int handle, const Rectangle &fromImage, const Rectangle &search, const Point &size) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  if (all_trackers[handle]->reference_edges_final) return -2;
+  if (size.x > search.width() || size.y > search.height()) return -3;
+  if (!fromImage.contains(search)) return -4;
+  return 0;
+}
+
+// Find a clean set of edges within a region to do automatic jitter-compensation during tracking
+// Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
+float TrackerLibrary::addBestXEdgesInImage(int handle, Image& im, const Rectangle &search, const Point &size) {
+  int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size - 1), Profile::OverY);
+
+  float ans = p->best_inside(im, search);
+  if (p->n_features <= 0) {
+    te->reference_edges.Truncate();
+    return NAN;
+  }
+
+  return ans;
+}
+
+// Find a clean set of edges within a region to do automatic jitter-compensation during tracking
+// Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
+float TrackerLibrary::addBestYEdgesInImage(int handle, Image& im, const Rectangle &search, const Point &size) {
+  int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size - 1), Profile::OverX);
+
+  float ans = p->best_inside(im, search);
+  if (p->n_features <= 0) {
+    te->reference_edges.Truncate();
+    return NAN;
+  }
+
+  return ans;
+}
+
+// Find a clean set of edges within a region to do automatic jitter-compensation during tracking
+// Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
+float TrackerLibrary::addBestXEdgesInImage8(int handle, Image8& im, const Rectangle &search, const Point &size) {
+  int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size - 1), Profile::OverY);
+
+  float ans = p->best_inside8(im, search);
+  if (p->n_features <= 0) {
+    te->reference_edges.Truncate();
+    return NAN;
+  }
+
+  return ans;
+}
+
+// Find a clean set of edges within a region to do automatic jitter-compensation during tracking.
+// Returns a quality score indicating how "good" the edges are, or NAN to indicate that no edges were found and nothing was added to the list.
+float TrackerLibrary::addBestYEdgesInImage8(int handle, Image8& im, const Rectangle &search, const Point &size) {
+  int err = checkInImageBounds(handle, im.bounds, search, size); if (err) return err;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size - 1), Profile::OverX);
+
+  float ans = p->best_inside8(im, search);
+  if (p->n_features <= 0) {
+    te->reference_edges.Truncate();
+    return NAN;
+  }
+
+  return ans;
+}
+
+// Gets the number of edge profiles already loaded
+int TrackerLibrary::loadedProfiles(int handle) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+
+  return all_trackers[handle]->reference_edges.size;
+}
+
+Profile* TrackerLibrary::getProfileIfValid(int handle, int profile) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return NULL;
+  if (all_trackers[handle]==NULL) return NULL;
+
+  TrackerEntry *te = all_trackers[handle];
+
+  if (profile < 0 || profile >= te->reference_edges.size) return NULL;
+
+  if (te->cached_profile_index != profile) {
+    te->cached_profile = &(te->reference_edges.index(profile));
+    te->cached_profile_index = profile;
+  }
+
+  return te->cached_profile;
+}
+
+// 1 = edge across X; 2 = edge across Y; negative = error
+int TrackerLibrary::profileDirection(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return (p->direction == Profile::OverX) ? 2 : 1;  // Collapse direction is opposite from edge direction
+}
+
+// Gets the lower bound of the profile in the x direction
+int TrackerLibrary::profileCorner_x0(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->source.near.x;
+}
+
+// Gets the upper bound (inclusive) of the profile in the x direction.
+int TrackerLibrary::profileCorner_x1(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->source.far.x;
+}
+
+// Gets the lower bound of the profile in the y direction
+int TrackerLibrary::profileCorner_y0(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->source.near.y;
+
+}
+
+// Gets the upper bound (inclusive) of the profile in the y direction
+int TrackerLibrary::profileCorner_y1(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->source.far.y;
+}
+
+// Returns the number of edges associated with a particular profile
+int TrackerLibrary::profileEdgeCount(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return p->n_features;
+}
+
+// Returns the position of a particular edge in a particular profile, if it exists; NAN otherwise.
+float TrackerLibrary::profileEdgeLocation(int handle, int profile, int edge) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return NAN;
+  if (edge < 0 || edge >= p->n_features) return NAN;
+  return p->features[edge].position;
+}
+
+// Returns the strength of a particular edge in a particular profile, if it exists; NAN otherwise
+float TrackerLibrary::profileEdgeStrength(int handle, int profile, int edge) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return NAN;
+  if (edge < 0 || edge >= p->n_features) return NAN;
+  return p->features[edge].strength;
+}
+
+// Returns the polarity of a particular edge in a particular profile, if it exists; 0 otherwise.
+int TrackerLibrary::profileEdgePolarity(int handle, int profile, int edge) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return 0;
+  if (edge < 0 || edge >= p->n_features) return 0;
+  return p->features[edge].sign;
+}
+
+// Removes a particular profile (by index), if it exists.
+int TrackerLibrary::removeOneProfile(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  TrackerEntry *te = all_trackers[handle];
+  if (te->reference_edges_final) return -2;
+  Listable<Profile> *lp = NULL;
+  for (te->reference_edges.advance(lp); lp != NULL && &(lp->data) != p; te->reference_edges.advance(lp)) {}
+  if (lp == NULL) return -3;
+  te->reference_edges.Destroy(lp);
+  return 0;
+}
+
+// Removes all profiles.  Returns the number of profiles removed.
+int TrackerLibrary::removeAllProfiles(int handle) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+
+  TrackerEntry *te = all_trackers[handle];
+  if (te == NULL) return -1;
+
+  auto n_removed = te->reference_edges.size;
+  while (te->reference_edges.size > 0) te->reference_edges.Behead();
+  
+  return n_removed; 
+}
+
+
+
 // Set the intensity above or below which we will fill a reference object
 int TrackerLibrary::setRefIntensityThreshold(int handle,int intensity_low,int intensity_high)
 {
@@ -974,9 +1190,11 @@ int TrackerLibrary::loadImage(int handle,Image& im,float time)
     return 0;
   }
   
+  if (!te->reference_edges_final) te->reference_edges_final = true;
+
   im.divide_bg = te->performance.use_division;	
   Performance& p = te->performance;
-  p.readyNext(&im,time);
+  p.readyNext(&im, te->reference_edges, time);
   te->image_loaded = true;
   te->statistics_ready = false;
   SummaryData* sd = new( te->summary.Append() ) SummaryData( p.current_frame , time , &te->eventstore );
@@ -1007,9 +1225,11 @@ int TrackerLibrary::loadImage8(int handle, Image8& im, float time)
     return 0;
   }
   
+  if (!te->reference_edges_final) te->reference_edges_final = true;
+
   im.divide_bg = te->performance.use_division;  
   Performance& p = te->performance;
-  p.readyNext8(&im,time);
+  p.readyNext8(&im, te->reference_edges, time);
   te->image_loaded = true;
   te->statistics_ready = false;
   SummaryData* sd = new( te->summary.Append() ) SummaryData( p.current_frame , time , &te->eventstore );
@@ -1179,6 +1399,10 @@ int TrackerLibrary::processImage(int handle)
   sd.dancer_aspect = aspect.mean();
   sd.dancer_relativeaspect = rel_aspect.mean();
   sd.dancer_pixelcount = pixelcount.mean();
+  sd.dancer_jitter_x = te->performance.jitter.x;
+  sd.dancer_jitter_y = te->performance.jitter.y;
+  sd.dancer_shift_x = te->performance.ijitter.x;
+  sd.dancer_shift_y = te->performance.ijitter.y;
   if (sd.n_speed_updates * sd.update_frequency < sd.frame_time)
   {
     sd.n_speed_updates = (int)ceil( sd.frame_time / sd.update_frequency );
@@ -1264,6 +1488,16 @@ int TrackerLibrary::processImage(int handle)
     } 
     sd.dancer_endwiggle = wiggle.mean();
   }
+
+#ifndef NO_DEJITTER
+  if (p.jitter.x != p.ijitter.x || p.jitter.y != p.ijitter.y) {
+    auto delta = p.jitter - p.ijitter;
+    p.dancers.start();
+    while (p.dancers.advance()) {
+      p.dancers.i().movie.t().jitter = delta;
+    }
+  }
+#endif
   
   te->statistics_ready = true;
 
@@ -1736,12 +1970,59 @@ int test_mwt_library(int bin)
   for (int j=0;j<4;j++)
   {
     arena = (3*W)/4;
+    arena.set(Rectangle(Point(0, 0), Point(15, 15)), W/3);
     worm1.imprint(arena,m,0.5,2);
     worm2.imprint(arena,m,0.5,2);
     worm3.imprint(arena,m,0.5,2);
     arena.set( Rectangle( Point(33,256+215) , Point(36,256+222) ) , W/3 );
     arena8.copy16(arena, true);
     arena.copy8(arena8, true);
+
+#ifndef NO_DEJITTER
+    if (j==0) {
+      Rectangle where(Point(4, 4), Point(23, 23));
+      auto q1x = a_library.addBestXEdgesInImage(h1, arena, where, Point(8, 4));
+      auto q1y = a_library.addBestYEdgesInImage(h1, arena, where, Point(4, 8));
+      auto q3x = a_library.addBestXEdgesInImage8(h3, arena8, where, Point(8, 4));
+      auto q3y = a_library.addBestYEdgesInImage8(h3, arena8, where, Point(4, 8));
+      printf("Edge quality: %f %f and %f %f\n", q1x, q1y, q3x, q3y);
+      if (!(q1x > 0)) return 201;
+      if (!(q1y > 0)) return 202;
+      if (!(q3x > 0)) return 203;
+      if (!(q3y > 0)) return 204;
+      if (a_library.loadedProfiles(h1) != 2) return 205;
+      if (a_library.loadedProfiles(h3) != 2) return 206;
+      if (1 + a_library.profileCorner_x1(h1, 0) - a_library.profileCorner_x0(h1, 0) != 8) return 207;
+      if (1 + a_library.profileCorner_y1(h1, 0) - a_library.profileCorner_y0(h1, 0) != 4) return 208;
+      if (1 + a_library.profileCorner_x1(h1, 1) - a_library.profileCorner_x0(h1, 1) != 4) return 209;
+      if (1 + a_library.profileCorner_y1(h1, 1) - a_library.profileCorner_y0(h1, 1) != 8) return 210;
+      if (1 + a_library.profileCorner_x1(h3, 0) - a_library.profileCorner_x0(h3, 0) != 8) return 211;
+      if (1 + a_library.profileCorner_y1(h3, 0) - a_library.profileCorner_y0(h3, 0) != 4) return 212;
+      if (1 + a_library.profileCorner_x1(h3, 1) - a_library.profileCorner_x0(h3, 1) != 4) return 213;
+      if (1 + a_library.profileCorner_y1(h3, 1) - a_library.profileCorner_y0(h3, 1) != 8) return 214;
+      if (a_library.profileEdgeCount(h1, 0) != 1) return 215;
+      if (a_library.profileEdgeCount(h1, 1) != 1) return 216;
+      if (a_library.profileEdgeCount(h3, 0) != 1) return 217;
+      if (a_library.profileEdgeCount(h3, 1) != 1) return 218;
+      if (!(fabsf(a_library.profileCorner_x0(h1, 0) + a_library.profileEdgeLocation(h1, 0, 0) - 16) < 1.1)) return 219;
+      if (!(fabsf(a_library.profileCorner_y0(h1, 1) + a_library.profileEdgeLocation(h1, 1, 0) - 16) < 1.1)) return 220;
+      if (!(fabsf(a_library.profileCorner_x0(h3, 0) + a_library.profileEdgeLocation(h3, 0, 0) - 16) < 1.1)) return 221;
+      if (!(fabsf(a_library.profileCorner_y0(h3, 1) + a_library.profileEdgeLocation(h3, 1, 0) - 16) < 1.1)) return 222;
+      if (!(a_library.profileEdgeStrength(h1, 0, 0) > 0)) return 223;
+      if (!(a_library.profileEdgeStrength(h1, 1, 0) > 0)) return 224;
+      if (!(a_library.profileEdgeStrength(h3, 0, 0) > 0)) return 225;
+      if (!(a_library.profileEdgeStrength(h3, 1, 0) > 0)) return 226;
+      if (!(a_library.profileEdgePolarity(h1, 0, 0) > 0)) return 227;
+      if (!(a_library.profileEdgePolarity(h1, 1, 0) > 0)) return 228;
+      if (!(a_library.profileEdgePolarity(h3, 0, 0) > 0)) return 229;
+      if (!(a_library.profileEdgePolarity(h3, 1, 0) > 0)) return 230;
+      if (!(a_library.profileDirection(h1, 0) == 1)) return 231;
+      if (!(a_library.profileDirection(h1, 1) == 2)) return 232;
+      if (!(a_library.profileDirection(h3, 0) == 1)) return 233;
+      if (!(a_library.profileDirection(h3, 1) == 2)) return 234;
+    }
+#endif
+
     for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
       unsigned short u = arena.get(x,y);
       unsigned short v = arena8.get(x,y);
@@ -1794,7 +2075,7 @@ int test_mwt_library(int bin)
     worm2.wiggle(0.4);
     worm3.wiggle(0.4);
   }
-  
+
   // Make sure error-checking is working; shouldn't be able to process images without loading them!
   i = a_library.processImage(h1); if (i!=0) return 33;
   i = a_library.processImage(h2); if (i!=0) return 34;
@@ -1819,6 +2100,15 @@ int test_mwt_library(int bin)
   for (int j=0;j<96;j++)
   {
     arena = (W*3)/4;
+    arena.set(Rectangle(Point(0, 0), Point(15 + (j%2), 15 + ((j%5)/2))), W/3);
+    if ((j%5) == 1) arena.set(Rectangle(Point(0, 16), Point(15 + (j%2), 16)), (short)(W*(0.4/3 + 0.6*0.75)));
+    if ((j%5) == 3) arena.set(Rectangle(Point(0, 17), Point(15 + (j%2), 17)), (short)(W*(0.6/3 + 0.4*0.75)));
+#ifndef NO_DEJITTER
+    auto delta = FPoint((j%2) ? 1 : -1, (j%5) ? (((j%5) == 1 || (j%5) == 4) ? 0.4 : 0.6) : -2);
+    worm1.center += delta;
+    worm2.center += delta;
+    worm3.center += delta;
+#endif
     worm1.imprint(arena,m,0.4,2);
     worm2.imprint(arena,m,0.4,2);
     worm3.imprint(arena,m,0.4,2);
@@ -1893,7 +2183,7 @@ int test_mwt_library(int bin)
       i = a_library.markEvent(h4,1); if (i!=h4) return 144;
       i = a_library.markEvent(h3,2); if (i!=h3) return 145;
     }
-    
+
     i = a_library.processImage(h1); if (i<2 || i>3) return 46;
     i = a_library.processImage(h2); if (i != 0) return 47;
     i = a_library.processImage(h3); if (i<2 || i>3) return 146;
@@ -1959,6 +2249,8 @@ int test_mwt_library(int bin)
   
   i = a_library.complete(h1); if (i!=h1) return 50;
   i = a_library.complete(h2); if (i!=h2) return 51;
+  i = a_library.complete(h3); if (i!=h3) return 52;
+  i = a_library.complete(h4); if (i!=h4) return 53;
   
   return 0;
 }
