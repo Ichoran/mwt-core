@@ -156,13 +156,14 @@ public:
   int pixel_count;  // Will be lost from stats when history is cleared, so keep it here
   Dancer* dancer;   // We will use member variables from dancer in order to avoid duplicating them each frame
   Listable<FloodData>* stats; // We'll only have one, but we make it listable so we can just grab it from the floodfill list
+  FPoint jitter;    // Jitter in the image
   Image *im;
   Listable<Contour>* skeleton; // Listable for easier disposal
   Listable<Contour>* outline; // Listable for easier disposal
   Listable<PackedContour>* packedline;  // Listable for easier disposal
   
   
-  Blob(int F=0,double T=0.0) : frame(F),time(T),pixel_count(0),dancer(NULL),stats(NULL),im(NULL),skeleton(NULL),outline(NULL),packedline(NULL) { }
+  Blob(int F=0,double T=0.0) : frame(F),time(T),pixel_count(0),dancer(NULL),stats(NULL),jitter(0,0),im(NULL),skeleton(NULL),outline(NULL),packedline(NULL) { }
   ~Blob();
   
   inline FloodData& data() { return stats->data; }

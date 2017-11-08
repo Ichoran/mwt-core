@@ -576,14 +576,14 @@ bool Blob::print(FILE* f,const char* prefix)
     {
       d = &(stats->data);
       i = fprintf(f,"%d %.3f  %.3f %.3f  %d  %.3f %.3f  %.3f  %.1f %.1f%c",
-        frame,time,d->centroid.x,d->centroid.y,pixel_count,
+        frame,time,d->centroid.x-jitter.x,d->centroid.y-jitter.y,pixel_count,
         d->major.x,d->major.y,d->minor.length(),d->long_axis,d->short_axis,tail_character);
     }
     else
     {
       d = &(stats->data);
       i = fprintf(f,"%s %d %.3f  %.3f %.3f  %d  %.3f %.3f  %.3f  %.1f% .1f%c",
-        prefix,frame,time,d->centroid.x,d->centroid.y,pixel_count,
+        prefix,frame,time,d->centroid.x-jitter.x,d->centroid.y-jitter.y,pixel_count,
         d->major.x,d->major.y,d->minor.length(),d->long_axis,d->short_axis,tail_character);
     }
     if (tail_character==' ' && skeleton!=NULL && spine().size()==SKELETON_SIZE) // Print skeleton

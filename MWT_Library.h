@@ -250,6 +250,7 @@ public:
 private:
   Profile* getProfileIfValid(int handle, int profile);
 public:
+  int profileDirection(int handle, int profile);
   int profileCorner_x0(int handle, int profile);
   int profileCorner_x1(int handle, int profile);
   int profileCorner_y0(int handle, int profile);

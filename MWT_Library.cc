@@ -602,7 +602,7 @@ float TrackerLibrary::addBestXEdgesInImage(int handle, Image& im, const Rectangl
   
   TrackerEntry* te = all_trackers[handle];
 
-  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size), Profile::OverY);
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size - 1), Profile::OverY);
 
   float ans = p->best_inside(im, search);
   if (p->n_features <= 0) {
@@ -620,7 +620,7 @@ float TrackerLibrary::addBestYEdgesInImage(int handle, Image& im, const Rectangl
   
   TrackerEntry* te = all_trackers[handle];
 
-  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size), Profile::OverX);
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size - 1), Profile::OverX);
 
   float ans = p->best_inside(im, search);
   if (p->n_features <= 0) {
@@ -638,7 +638,7 @@ float TrackerLibrary::addBestXEdgesInImage8(int handle, Image8& im, const Rectan
   
   TrackerEntry* te = all_trackers[handle];
 
-  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size), Profile::OverY);
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size - 1), Profile::OverY);
 
   float ans = p->best_inside8(im, search);
   if (p->n_features <= 0) {
@@ -656,7 +656,7 @@ float TrackerLibrary::addBestYEdgesInImage8(int handle, Image8& im, const Rectan
   
   TrackerEntry* te = all_trackers[handle];
 
-  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size), Profile::OverX);
+  Profile *p = new (te->reference_edges.Append()) Profile(Rectangle(search.near, search.near + size - 1), Profile::OverX);
 
   float ans = p->best_inside8(im, search);
   if (p->n_features <= 0) {
@@ -689,6 +689,13 @@ Profile* TrackerLibrary::getProfileIfValid(int handle, int profile) {
   }
 
   return te->cached_profile;
+}
+
+// 1 = edge across X; 2 = edge across Y; negative = error
+int TrackerLibrary::profileDirection(int handle, int profile) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return -1;
+  return (p->direction == Profile::OverX) ? 2 : 1;  // Collapse direction is opposite from edge direction
 }
 
 // Gets the lower bound of the profile in the x direction
@@ -1481,6 +1488,16 @@ int TrackerLibrary::processImage(int handle)
     } 
     sd.dancer_endwiggle = wiggle.mean();
   }
+
+#ifndef NO_DEJITTER
+  if (p.jitter.x != p.ijitter.x || p.jitter.y != p.ijitter.y) {
+    auto delta = p.jitter - p.ijitter;
+    p.dancers.start();
+    while (p.dancers.advance()) {
+      p.dancers.i().movie.t().jitter = delta;
+    }
+  }
+#endif
   
   te->statistics_ready = true;
 
@@ -1960,6 +1977,8 @@ int test_mwt_library(int bin)
     arena.set( Rectangle( Point(33,256+215) , Point(36,256+222) ) , W/3 );
     arena8.copy16(arena, true);
     arena.copy8(arena8, true);
+
+#ifndef NO_DEJITTER
     if (j==0) {
       Rectangle where(Point(4, 4), Point(23, 23));
       auto q1x = a_library.addBestXEdgesInImage(h1, arena, where, Point(8, 4));
@@ -1967,7 +1986,42 @@ int test_mwt_library(int bin)
       auto q3x = a_library.addBestXEdgesInImage8(h3, arena8, where, Point(8, 4));
       auto q3y = a_library.addBestYEdgesInImage8(h3, arena8, where, Point(4, 8));
       printf("Edge quality: %f %f and %f %f\n", q1x, q1y, q3x, q3y);
+      if (!(q1x > 0)) return 201;
+      if (!(q1y > 0)) return 202;
+      if (!(q3x > 0)) return 203;
+      if (!(q3y > 0)) return 204;
+      if (a_library.loadedProfiles(h1) != 2) return 205;
+      if (a_library.loadedProfiles(h3) != 2) return 206;
+      if (1 + a_library.profileCorner_x1(h1, 0) - a_library.profileCorner_x0(h1, 0) != 8) return 207;
+      if (1 + a_library.profileCorner_y1(h1, 0) - a_library.profileCorner_y0(h1, 0) != 4) return 208;
+      if (1 + a_library.profileCorner_x1(h1, 1) - a_library.profileCorner_x0(h1, 1) != 4) return 209;
+      if (1 + a_library.profileCorner_y1(h1, 1) - a_library.profileCorner_y0(h1, 1) != 8) return 210;
+      if (1 + a_library.profileCorner_x1(h3, 0) - a_library.profileCorner_x0(h3, 0) != 8) return 211;
+      if (1 + a_library.profileCorner_y1(h3, 0) - a_library.profileCorner_y0(h3, 0) != 4) return 212;
+      if (1 + a_library.profileCorner_x1(h3, 1) - a_library.profileCorner_x0(h3, 1) != 4) return 213;
+      if (1 + a_library.profileCorner_y1(h3, 1) - a_library.profileCorner_y0(h3, 1) != 8) return 214;
+      if (a_library.profileEdgeCount(h1, 0) != 1) return 215;
+      if (a_library.profileEdgeCount(h1, 1) != 1) return 216;
+      if (a_library.profileEdgeCount(h3, 0) != 1) return 217;
+      if (a_library.profileEdgeCount(h3, 1) != 1) return 218;
+      if (!(fabsf(a_library.profileCorner_x0(h1, 0) + a_library.profileEdgeLocation(h1, 0, 0) - 16) < 1.1)) return 219;
+      if (!(fabsf(a_library.profileCorner_y0(h1, 1) + a_library.profileEdgeLocation(h1, 1, 0) - 16) < 1.1)) return 220;
+      if (!(fabsf(a_library.profileCorner_x0(h3, 0) + a_library.profileEdgeLocation(h3, 0, 0) - 16) < 1.1)) return 221;
+      if (!(fabsf(a_library.profileCorner_y0(h3, 1) + a_library.profileEdgeLocation(h3, 1, 0) - 16) < 1.1)) return 222;
+      if (!(a_library.profileEdgeStrength(h1, 0, 0) > 0)) return 223;
+      if (!(a_library.profileEdgeStrength(h1, 1, 0) > 0)) return 224;
+      if (!(a_library.profileEdgeStrength(h3, 0, 0) > 0)) return 225;
+      if (!(a_library.profileEdgeStrength(h3, 1, 0) > 0)) return 226;
+      if (!(a_library.profileEdgePolarity(h1, 0, 0) > 0)) return 227;
+      if (!(a_library.profileEdgePolarity(h1, 1, 0) > 0)) return 228;
+      if (!(a_library.profileEdgePolarity(h3, 0, 0) > 0)) return 229;
+      if (!(a_library.profileEdgePolarity(h3, 1, 0) > 0)) return 230;
+      if (!(a_library.profileDirection(h1, 0) == 1)) return 231;
+      if (!(a_library.profileDirection(h1, 1) == 2)) return 232;
+      if (!(a_library.profileDirection(h3, 0) == 1)) return 233;
+      if (!(a_library.profileDirection(h3, 1) == 2)) return 234;
     }
+#endif
 
     for (int x=0; x<arena.size.x/bin; x++) for (int y=0; y<arena.size.y/bin; y++) {
       unsigned short u = arena.get(x,y);
@@ -2046,7 +2100,15 @@ int test_mwt_library(int bin)
   for (int j=0;j<96;j++)
   {
     arena = (W*3)/4;
-    arena.set(Rectangle(Point(0, 0), Point(15 + (j%2), 15 + ((j%3)-1))), W/3);
+    arena.set(Rectangle(Point(0, 0), Point(15 + (j%2), 15 + ((j%5)/2))), W/3);
+    if ((j%5) == 1) arena.set(Rectangle(Point(0, 16), Point(15 + (j%2), 16)), (short)(W*(0.4/3 + 0.6*0.75)));
+    if ((j%5) == 3) arena.set(Rectangle(Point(0, 17), Point(15 + (j%2), 17)), (short)(W*(0.6/3 + 0.4*0.75)));
+#ifndef NO_DEJITTER
+    auto delta = FPoint((j%2) ? 1 : -1, (j%5) ? (((j%5) == 1 || (j%5) == 4) ? 0.4 : 0.6) : -2);
+    worm1.center += delta;
+    worm2.center += delta;
+    worm3.center += delta;
+#endif
     worm1.imprint(arena,m,0.4,2);
     worm2.imprint(arena,m,0.4,2);
     worm3.imprint(arena,m,0.4,2);
