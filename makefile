@@ -19,17 +19,13 @@ endif
 UNIT = -DUNIT_TEST_OWNER
 all: unit_geometry unit_lists unit_storage unit_image unit_align unit_blob unit_model unit_library
 
+lib: MWT_Image.o MWT_Align.o MWT_Blob.o MWT_Library.o
+
 unit_geometry: makefile MWT_Geometry.h MWT_Geometry.cc
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_geometry MWT_Geometry.cc
-
-MWT_Geometry.o: makefile MWT_Geometry.h MWT_Geometry.cc
-	$(CC) $(FLAGS) $(TGT) -o MWT_Geometry.o MWT_Geometry.cc
 	
 unit_lists: makefile MWT_Lists.h MWT_Lists.cc MWT_Geometry.h
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_lists MWT_Lists.cc
-
-MWT_Lists.o: makefile MWT_Lists.h MWT_Lists.cc MWT_Geometry.h
-	$(CC) $(FLAGS) $(TGT) -o MWT_Lists.o MWT_Lists.c
 	
 unit_storage: makefile MWT_Storage.h MWT_Storage.cc MWT_Lists.h
 	$(CC) $(FLAGS) $(UNIT) $(TGT) -o unit_storage MWT_Storage.cc
