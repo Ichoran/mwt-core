@@ -257,6 +257,7 @@ public:
   int profileCorner_y1(int handle, int profile);
   int profileEdgeCount(int handle, int profile);
   float profileEdgeLocation(int handle, int profile, int edge);
+  float globalProfileEdgeLocation(int handle, int profile, int edge);
   float profileEdgeStrength(int handle, int profile, int edge);
   int profileEdgePolarity(int handle, int profile, int edge);
   int removeOneProfile(int handle, int profile);

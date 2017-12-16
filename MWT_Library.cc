@@ -734,12 +734,20 @@ int TrackerLibrary::profileEdgeCount(int handle, int profile) {
   return p->n_features;
 }
 
-// Returns the position of a particular edge in a particular profile, if it exists; NAN otherwise.
+// Returns 1 if the edge is oriented along x (collapse along y), 2 if along y, otherwise it's an error.
 float TrackerLibrary::profileEdgeLocation(int handle, int profile, int edge) {
   Profile* p = getProfileIfValid(handle, profile);
   if (p == NULL) return NAN;
   if (edge < 0 || edge >= p->n_features) return NAN;
   return p->features[edge].position;
+}
+
+// Returns the absolute position of a particular edge in a particular profile, if it exists; NAN otherwise.
+float TrackerLibrary::globalProfileEdgeLocation(int handle, int profile, int edge) {
+  Profile* p = getProfileIfValid(handle, profile);
+  if (p == NULL) return NAN;
+  if (edge < 0 || edge >= p->n_features) return NAN;
+  return p->features[edge].position + ((p->direction == Profile::OverX) ? p->source.near.y : p->source.near.x);
 }
 
 // Returns the strength of a particular edge in a particular profile, if it exists; NAN otherwise
@@ -2008,18 +2016,22 @@ int test_mwt_library(int bin)
       if (!(fabsf(a_library.profileCorner_y0(h1, 1) + a_library.profileEdgeLocation(h1, 1, 0) - 16) < 1.1)) return 220;
       if (!(fabsf(a_library.profileCorner_x0(h3, 0) + a_library.profileEdgeLocation(h3, 0, 0) - 16) < 1.1)) return 221;
       if (!(fabsf(a_library.profileCorner_y0(h3, 1) + a_library.profileEdgeLocation(h3, 1, 0) - 16) < 1.1)) return 222;
-      if (!(a_library.profileEdgeStrength(h1, 0, 0) > 0)) return 223;
-      if (!(a_library.profileEdgeStrength(h1, 1, 0) > 0)) return 224;
-      if (!(a_library.profileEdgeStrength(h3, 0, 0) > 0)) return 225;
-      if (!(a_library.profileEdgeStrength(h3, 1, 0) > 0)) return 226;
-      if (!(a_library.profileEdgePolarity(h1, 0, 0) > 0)) return 227;
-      if (!(a_library.profileEdgePolarity(h1, 1, 0) > 0)) return 228;
-      if (!(a_library.profileEdgePolarity(h3, 0, 0) > 0)) return 229;
-      if (!(a_library.profileEdgePolarity(h3, 1, 0) > 0)) return 230;
-      if (!(a_library.profileDirection(h1, 0) == 1)) return 231;
-      if (!(a_library.profileDirection(h1, 1) == 2)) return 232;
-      if (!(a_library.profileDirection(h3, 0) == 1)) return 233;
-      if (!(a_library.profileDirection(h3, 1) == 2)) return 234;
+      if (!(fabsf(a_library.profileCorner_x0(h1, 0) + a_library.profileEdgeLocation(h1, 0, 0) - a_library.globalProfileEdgeLocation(h1, 0, 0)) < 0.01)) return 223;
+      if (!(fabsf(a_library.profileCorner_y0(h1, 1) + a_library.profileEdgeLocation(h1, 1, 0) - a_library.globalProfileEdgeLocation(h1, 1, 0)) < 0.01)) return 224;
+      if (!(fabsf(a_library.profileCorner_x0(h3, 0) + a_library.profileEdgeLocation(h3, 0, 0) - a_library.globalProfileEdgeLocation(h3, 0, 0)) < 0.01)) return 225;
+      if (!(fabsf(a_library.profileCorner_y0(h3, 1) + a_library.profileEdgeLocation(h3, 1, 0) - a_library.globalProfileEdgeLocation(h3, 1, 0)) < 0.01)) return 226;
+      if (!(a_library.profileEdgeStrength(h1, 0, 0) > 0)) return 227;
+      if (!(a_library.profileEdgeStrength(h1, 1, 0) > 0)) return 228;
+      if (!(a_library.profileEdgeStrength(h3, 0, 0) > 0)) return 229;
+      if (!(a_library.profileEdgeStrength(h3, 1, 0) > 0)) return 230;
+      if (!(a_library.profileEdgePolarity(h1, 0, 0) > 0)) return 231;
+      if (!(a_library.profileEdgePolarity(h1, 1, 0) > 0)) return 232;
+      if (!(a_library.profileEdgePolarity(h3, 0, 0) > 0)) return 233;
+      if (!(a_library.profileEdgePolarity(h3, 1, 0) > 0)) return 234;
+      if (!(a_library.profileDirection(h1, 0) == 1)) return 235;
+      if (!(a_library.profileDirection(h1, 1) == 2)) return 236;
+      if (!(a_library.profileDirection(h3, 0) == 1)) return 237;
+      if (!(a_library.profileDirection(h3, 1) == 2)) return 238;
     }
 #endif
 
