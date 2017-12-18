@@ -485,7 +485,6 @@ float Profile::quality() {
     }
     q += strength*((centrality > 0.5) ? 1 : (3*centrality - 0.5));
   }
-  printf("Quality at %d %d is %.2f\n", source.near.x, source.near.y, q);
   return q;
 }
 
@@ -700,7 +699,7 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
       imprint(frame);
       auto q = quality();
       if (q > best_q) {
-        printf("  Switched to this one!\n");
+        printf("  Switched to %d %d because score is %.2f!\n", source.near.x, source.near.y, q);
         best_p = source.near;
         best_q = q;
       }
@@ -712,7 +711,7 @@ float Profile::best_tiled_inside(Image& frame, Rectangle bounds) {
         imprint(frame);
         auto q = quality();
         if (q > best_q) {
-          printf("  Switched to this one!\n");
+          printf("  Switched %d %d because score is %.2f!\n", source.near.x, source.near.y, q);
           best_p = source.near;
           best_q = q;
         }
@@ -851,7 +850,7 @@ float Profile::best_shifted_inside8(Image8& frame, Rectangle bounds, int& shift)
   imprint8(frame);
   auto best_p = source.near;
   auto best_q = quality();
-  printf("  Using that one.\n");
+  printf("  Using %d %d and score is %.2f!\n", source.near.x, source.near.y, best_q);
   int nscroll = (direction == Profile::OverX) ? steps.y : steps.x;
   int nslide  = (direction == Profile::OverX) ? steps.x : steps.y;
   int iscroll = 0;
@@ -872,7 +871,7 @@ float Profile::best_shifted_inside8(Image8& frame, Rectangle bounds, int& shift)
     if (q > best_q) {
       best_p = source.near;
       best_q = q;
-      printf("  Switched to this one.\n");
+      printf("  Switched to %d %d because score is %.2f!\n", source.near.x, source.near.y, q);
     }
   }
   source.nearTo(best_p);
