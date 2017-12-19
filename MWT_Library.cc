@@ -184,6 +184,14 @@ int TrackerLibrary::setCombineBlobs( int handle, bool type )
 }
 
 
+int TrackerLibrary::setTrackerName(int handle, const char* name) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  all_trackers[handle]->setTrackerName(name);
+  return handle;  
+}
+
+
 // Set the date in pieces.  Normally, don't do this--just let it pick its own date, or have one or all others adopt the date of one
 int TrackerLibrary::setDate(int handle,int year,int month,int day,int hour,int minute,int second)
 {
@@ -1907,6 +1915,7 @@ int test_mwt_library(int bin)
   i = a_library.setImageInfo(h2,10,512/bin,512/bin); if (i!=h2) return 3;
   i = a_library.setImageInfo(h3,8,512/bin,512/bin); if (i!=h3) return 102;
   i = a_library.setImageInfo(h4,8,512/bin,512/bin); if (i!=h4) return 103;
+  i = a_library.setTrackerName(h1, "test"); if (i!=h1) return 300;
   i = a_library.setDate(h1,2007,12,26,10,50,33); if (i!=h1) return 4;
   i = a_library.borrowDate(h2,h1); if (i!=h2) return 5;
   i = a_library.borrowDate(h3,h1); if (i!=h3) return 104;

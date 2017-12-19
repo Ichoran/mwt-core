@@ -199,6 +199,7 @@ public:
   
   // Preparing output
 	int setCombineBlobs( int handle, bool type );
+  int setTrackerName(int handle, const char *name);
   int setDate(int handle,int year,int month,int day,int hour,int minute,int second);
   int borrowDate(int handle,int donor_handle);
   int setAllDatesToMine(int handle);

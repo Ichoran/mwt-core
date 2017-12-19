@@ -49,8 +49,8 @@ void FilenameComponent::showNameDate(const char *trackerName, struct tm& date)
   if (format!=NULL) delete[] format; 
   // Make sure the buffer is long enough if you change the format string!
   int nameLen = (trackerName == NULL) ? 0 : (strlen(trackerName) + 1);
-  format = new char[16 + nameLen];
-  if (nameLen > 0) snprintf(format, nameLen, "%s_", trackerName);
+  format = new char[18 + nameLen];
+  if (nameLen > 0) snprintf(format, nameLen+1, "%s_", trackerName);
   snprintf(format + nameLen, 16, "%04d%02d%02d_%02d%02d%02d",date.tm_year,date.tm_mon+1,date.tm_mday,date.tm_hour,date.tm_min,date.tm_sec);
   format[nameLen+15] = 0;
   width = strlen(format);  // Should always be nameLen+15, but just in case format string gets changed and counted wrong....
