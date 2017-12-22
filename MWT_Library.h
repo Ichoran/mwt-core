@@ -263,6 +263,7 @@ public:
   int profileEdgePolarity(int handle, int profile, int edge);
   int removeOneProfile(int handle, int profile);
   int removeAllProfiles(int handle);
+  int useProfilesToCorrectImage(int handle, bool use_them = true);
   
   // Preparing and getting feedback on reference objects
   int setRefIntensityThreshold(int handle,int intensity_low,int intensity_high);

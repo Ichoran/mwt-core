@@ -94,8 +94,10 @@ clean:
 	rm -f fg*.tiff bg*.tiff
 	rm -f performance*.tiff
 	rm -f test_20071226_105033/*
+	rm -f 20071226_105033/*
 	rm -f 20071212_130514/*
 	if [ -a test_20071226_105033 ]; then rmdir test_20071226_105033; fi
+	if [ -a 20071226_105033 ]; then rmdir 20071226_105033; fi
 	if [ -a 20071212_130514 ]; then rmdir 20071212_130514; fi
 	rm -f lib/MWT.dll
 	if [ -a lib ]; then rmdir lib; fi

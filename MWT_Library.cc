@@ -35,11 +35,8 @@ void SummaryData::fprint(FILE* f , ManagedList<BlobOriginFate>& mlbof , ManagedL
   if (
     event_list.size > 0 ||
     (mlbof.current!=NULL && mlbof.i().frame==frame_number) ||
-    (mlbf.current!=NULL && mlbf.i().frame==frame_number)
-#ifndef NO_DEJITTER
-    || dancer_jitter_x != 0 || dancer_jitter_y != 0
-    || dancer_shift_x != 0 || dancer_shift_y != 0
-#endif
+    (mlbf.current!=NULL && mlbf.i().frame==frame_number) ||
+    dancer_jitter_x != 0 || dancer_jitter_y != 0
   ) {
     last_character = ' ';
   }
@@ -79,11 +76,9 @@ void SummaryData::fprint(FILE* f , ManagedList<BlobOriginFate>& mlbof , ManagedL
       if( !mlbf.advance()) mlbf.current=NULL;
     }
   }
-#ifndef NO_DEJITTER
   if (dancer_jitter_x != 0 || dancer_jitter_y != 0 || dancer_shift_x != 0 || dancer_shift_y != 0) {
     fprintf(f, " @ %.3f %.3f  %d %d", dancer_jitter_x, dancer_jitter_y, dancer_shift_x, dancer_shift_y);
   }
-#endif
   if (last_character!='\n') fprintf(f,"\n");
 }
 
@@ -800,6 +795,17 @@ int TrackerLibrary::removeAllProfiles(int handle) {
   return n_removed; 
 }
 
+// Sets whether the profile positions are merely informative or if they actually are used to correct image position
+int TrackerLibrary::useProfilesToCorrectImage(int handle, bool use_them) {
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+
+  TrackerEntry *te = all_trackers[handle];
+  if (te == NULL) return -1;
+
+  te->performance.correct_for_jitter = use_them;
+
+  return handle; 
+}
 
 
 // Set the intensity above or below which we will fill a reference object
@@ -1505,16 +1511,6 @@ int TrackerLibrary::processImage(int handle)
     sd.dancer_endwiggle = wiggle.mean();
   }
 
-#ifndef NO_DEJITTER
-  if (p.jitter.x != p.ijitter.x || p.jitter.y != p.ijitter.y) {
-    auto delta = p.jitter - p.ijitter;
-    p.dancers.start();
-    while (p.dancers.advance()) {
-      p.dancers.i().movie.t().jitter = delta;
-    }
-  }
-#endif
-  
   te->statistics_ready = true;
 
   return n_dancers;

@@ -576,14 +576,14 @@ bool Blob::print(FILE* f,const char* prefix)
     {
       d = &(stats->data);
       i = fprintf(f,"%d %.3f  %.3f %.3f  %d  %.3f %.3f  %.3f  %.1f %.1f%c",
-        frame,time,d->centroid.x-jitter.x,d->centroid.y-jitter.y,pixel_count,
+        frame,time,d->centroid.x,d->centroid.y,pixel_count,
         d->major.x,d->major.y,d->minor.length(),d->long_axis,d->short_axis,tail_character);
     }
     else
     {
       d = &(stats->data);
       i = fprintf(f,"%s %d %.3f  %.3f %.3f  %d  %.3f %.3f  %.3f  %.1f% .1f%c",
-        prefix,frame,time,d->centroid.x-jitter.x,d->centroid.y-jitter.y,pixel_count,
+        prefix,frame,time,d->centroid.x,d->centroid.y,pixel_count,
         d->major.x,d->major.y,d->minor.length(),d->long_axis,d->short_axis,tail_character);
     }
     if (tail_character==' ' && skeleton!=NULL && spine().size()==SKELETON_SIZE) // Print skeleton
@@ -742,7 +742,7 @@ void Dancer::readyAnother8(Image8* fg, Image* bg, int frame, double time)
 
 
 // Actually look for a new blob
-bool Dancer::findAnother(bool best_guess, Mask* exclusion_mask, FPoint jitter)
+bool Dancer::findAnother(bool best_guess, Mask* exclusion_mask)
 {
   if (validated) {
 		return true;  // If we've already found one, we're done.
@@ -1312,8 +1312,11 @@ void Performance::calculateJitterGivenDeltaSorted(float *xedge, int nxe, float *
   if (nxe > 0) jx = (nxe&1) ? xedge[nxe/2] : 0.5*(xedge[nxe/2] + xedge[nxe/2 - 1]);
   if (nye > 0) jy = (nye&1) ? yedge[nye/2] : 0.5*(yedge[nye/2] + yedge[nye/2 - 1]);
   jitter.set(jx, jy);
-  if (fabsf(jx - ijitter.x) > 0.55) ijitter.x = (int)lrintf(jx);
-  if (fabsf(jy - ijitter.y) > 0.55) ijitter.y = (int)lrintf(jy);
+  if (correct_for_jitter) {
+    if (fabsf(jx - ijitter.x) > 0.55) ijitter.x = (int)lrintf(jx);
+    if (fabsf(jy - ijitter.y) > 0.55) ijitter.y = (int)lrintf(jy);
+  }
+  else ijitter.set(0, 0);
 }
 
 void Performance::calculateJitter(Image *fg, ManagedList<Profile> &edges) {
@@ -1549,10 +1552,10 @@ void Performance::readyNext(Image* fg, ManagedList<Profile> &edges, double time)
   calculateJitter(fg, edges);
   anticipateNext(time);
   
-  fg->bounds -= ijitter;
+  if (correct_for_jitter) fg->bounds -= ijitter;
   Rectangle single_bound;
   while (findNextItemBounds(single_bound)) loadNextSingleItem(fg);
-  fg->bounds += ijitter;
+  if (correct_for_jitter) fg->bounds += ijitter;
 }
 
 
@@ -1562,10 +1565,10 @@ void Performance::readyNext8(Image8* fg, ManagedList<Profile> &edges, double tim
   calculateJitter8(fg, edges);
   anticipateNext(time);
   
-  fg->bounds -= ijitter;
+  if (correct_for_jitter) fg->bounds -= ijitter;
   Rectangle single_bound;
   while (findNextItemBounds(single_bound)) loadNextSingleItem8(fg);
-  fg->bounds += ijitter;
+  if (correct_for_jitter) fg->bounds += ijitter;
 }
 
 
@@ -1576,13 +1579,12 @@ int Performance::findNext()
 {
   bool found;
   Dancer* d;
-  FPoint jit = jitter - ijitter;
   
   // First get reference objects
   sitters.start();
   while(sitters.advance())
   {
-    found = sitters.i().findAnother(true, NULL, jit);
+    found = sitters.i().findAnother(true, NULL);
     if (found) sitters.i().validate();
     else sitters.i().invalidate();
     if (sit_fname!=NULL && current_frame<3) enableOutput(sitters.i(),true); // Only enable at beginning since we never lose these
@@ -1593,7 +1595,7 @@ int Performance::findNext()
   while (dancers.advance())
   {
     //printf("I found a dancer!  %d spans %d - %d\n", dancers.i().ID, dancers.i().frames.lo(), dancers.i().frames.hi());
-    found = dancers.i().findAnother(false, danger_zone, jit);
+    found = dancers.i().findAnother(false, danger_zone);
     if (!found)
     {
       if (dancers.i().candidates.size==0)  // Lost blob
@@ -2174,7 +2176,7 @@ int test_mwt_blob_dancer() // Doesn't test output--need Performance for that
   im.set( r1 , G );
   im.set( r2 , G/2 );
   d->readyAnother(&im , NULL , 2 , 0.04);
-  tf = d->findAnother(true, NULL, FPoint(0, 0));
+  tf = d->findAnother(true, NULL);
   if (tf==false) return 4;
   d->validate();
   if (d->movie.t().mask().pixel_count != r2.area()) return 5;

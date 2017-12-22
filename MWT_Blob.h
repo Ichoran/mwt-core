@@ -156,14 +156,13 @@ public:
   int pixel_count;  // Will be lost from stats when history is cleared, so keep it here
   Dancer* dancer;   // We will use member variables from dancer in order to avoid duplicating them each frame
   Listable<FloodData>* stats; // We'll only have one, but we make it listable so we can just grab it from the floodfill list
-  FPoint jitter;    // Jitter in the image
   Image *im;
   Listable<Contour>* skeleton; // Listable for easier disposal
   Listable<Contour>* outline; // Listable for easier disposal
   Listable<PackedContour>* packedline;  // Listable for easier disposal
   
   
-  Blob(int F=0,double T=0.0) : frame(F),time(T),pixel_count(0),dancer(NULL),stats(NULL),jitter(0,0),im(NULL),skeleton(NULL),outline(NULL),packedline(NULL) { }
+  Blob(int F=0,double T=0.0) : frame(F),time(T),pixel_count(0),dancer(NULL),stats(NULL),im(NULL),skeleton(NULL),outline(NULL),packedline(NULL) { }
   ~Blob();
   
   inline FloodData& data() { return stats->data; }
@@ -299,7 +298,7 @@ public:
   Blob* makeFirst(int frame,double time);
   void readyAnother(Image *fg,Image *bg,int frame,double time);
   void readyAnother8(Image8 *fg, Image *bg, int frame, double time);
-  bool findAnother(bool best_guess, Mask* exclusion_mask, FPoint jitter);
+  bool findAnother(bool best_guess, Mask* exclusion_mask);
   void validate();
   void invalidate();
   
@@ -343,6 +342,7 @@ public:
   bool find_dancer_edge;
   FPoint jitter;
   Point ijitter;
+  bool correct_for_jitter;
   Profile edge_profile;
   
   // Default data retention/saving policies
@@ -412,6 +412,7 @@ public:
     find_dancer_edge(false),
     jitter(0, 0),
     ijitter(0, 0),
+    correct_for_jitter(false),
     edge_profile(Rectangle(0, 0, 0, 0), Profile::OverX),
 
     // Data retention/saving
