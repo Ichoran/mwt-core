@@ -343,6 +343,10 @@ public:
   FPoint jitter;
   Point ijitter;
   bool correct_for_jitter;
+  FPoint last_jitter;
+  FPoint recent_jitter;
+  double recent_shake_sq;
+  double shake_z_score;
   Profile edge_profile;
   
   // Default data retention/saving policies
@@ -413,6 +417,10 @@ public:
     jitter(0, 0),
     ijitter(0, 0),
     correct_for_jitter(false),
+    last_jitter(0, 0),
+    recent_jitter(0, 0),
+    recent_shake_sq(1.0),
+    shake_z_score(0.0),
     edge_profile(Rectangle(0, 0, 0, 0), Profile::OverX),
 
     // Data retention/saving

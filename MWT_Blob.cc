@@ -1311,7 +1311,14 @@ void Performance::calculateJitterGivenDeltaSorted(float *xedge, int nxe, float *
   float jy = 0;
   if (nxe > 0) jx = (nxe&1) ? xedge[nxe/2] : 0.5*(xedge[nxe/2] + xedge[nxe/2 - 1]);
   if (nye > 0) jy = (nye&1) ? yedge[nye/2] : 0.5*(yedge[nye/2] + yedge[nye/2 - 1]);
+  last_jitter = jitter;
   jitter.set(jx, jy);
+  float delta_last = jitter.distSq(last_jitter);
+  float delta_recent = jitter.distSq(recent_jitter);
+  double shake_sq = (delta_recent > delta_last && current_frame > 10) ? delta_recent : delta_last;
+  shake_z_score = (recent_shake_sq > 0 && shake_sq > 0) ? sqrt(shake_sq/recent_shake_sq) : 0.0;
+  recent_shake_sq = 0.95*recent_shake_sq + 0.05*delta_last;
+  recent_jitter.set(0.95*recent_jitter.x + 0.05*jitter.x, 0.95*recent_jitter.y + 0.05*jitter.y);
   if (correct_for_jitter) {
     if (fabsf(jx - ijitter.x) > 0.55) ijitter.x = (int)lrintf(jx);
     if (fabsf(jy - ijitter.y) > 0.55) ijitter.y = (int)lrintf(jy);
@@ -1626,9 +1633,9 @@ int Performance::findNext()
       }
     }
   }
-  // Then get new objects from strip
+  // Then get new objects from strip IF there's not too much shaking!
   if (candidates.size>0) candidates.flush();
-  band->floodMask( fill_I , &ssstore , &lsstore , candidates , (*band_area) );
+  if (shake_z_score < 2) band->floodMask( fill_I , &ssstore , &lsstore , candidates , (*band_area) );
   candidates.start();
   while (candidates.advance())
   {
