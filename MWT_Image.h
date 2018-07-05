@@ -642,6 +642,10 @@ public:
   int makeTiffHeader(unsigned char *buffer);
   int writeTiff(FILE *f);
   int writeTiff(const char *fname);
+  int writeRaw16(FILE *f);
+  int writeRaw16(const char *fname);
+  static Image* readRaw16(FILE *f);
+  static Image* readRaw16(const char* fname);
   void println() const;
 };
 
@@ -830,6 +834,10 @@ public:
   int makeTiffHeader(unsigned char *buffer);
   int writeTiff(FILE *f);
   int writeTiff(const char *fname);
+  int writeRaw8(FILE *f);
+  int writeRaw8(const char *fname);
+  static Image8* readRaw8(FILE *f);
+  static Image8* readRaw8(const char *fname);
   void println() const;
 };
 

@@ -3578,7 +3578,7 @@ int Image::writeTiff(FILE *f)
   
   if (!(bin<=1)) delete[] data;
   
-  if (x!=1 || y !=pixbytes) return 1;
+  if (x!=1 || y != pixbytes) return 1;
 
   return 0;
 }
@@ -3595,6 +3595,69 @@ int Image::writeTiff(const char *fname)
   return i;
 }
 
+
+// Write an image in "raw16" format to an open file.
+// Format is width (2 bytes), height (2 bytes), data X-major.
+// Everything is packed in native order.
+int Image::writeRaw16(FILE *f) {
+  if (!f) return 1;
+  short header[] = { (short)bounds.width(), (short)bounds.height() };
+  if (fwrite(header, 2, 2, f) != 2) return 1;
+  if (bin <= 1 && bounds.near.x == 0 && bounds.near.y == 0 && size.x == bounds.width() && size.y == bounds.height()) {
+    if (fwrite(pixels, 2, size.x*size.y, f) != (unsigned int)(size.x*size.y)) return 1;
+  }
+  else {
+    short *buffer = new short[size.x * size.y];
+    int i = 0;
+    for (int x = 0; x < size.x; x++) for (int y = 0; y < size.y; y++) buffer[i++] = get(x, y);
+    bool problem = fwrite(buffer, 2, size.x*size.y, f) != (unsigned int)(size.x*size.y);
+    delete[] buffer;
+    if (problem) return 1;
+  }
+  return 0;
+}
+
+
+// Write an image to a raw16 file given the filename
+int Image::writeRaw16(const char* fname) {
+  int i;
+  FILE *f = fopen(fname, "wb");
+  if (!f) return 1;
+  i = writeRaw16(f);
+  fclose(f);
+  return i;
+}
+
+
+// Read an image in "raw16" format to a new object allocated with `new`.
+// Format as in `writeRaw16(FILE*)`.
+// Returns `NULL` if anything goes wrong.
+Image* Image::readRaw16(FILE *f) {
+  short size[2];
+  if (fread(size, 2, 2, f) != 2) return NULL;
+  unsigned int width = size[0];
+  unsigned int height = size[1];
+  if (width < 0 || height < 0 || width > 32767 || height > 32767) return NULL;
+  Image *img = new Image(Point(width, height), false);
+  if (fread(img->pixels, 2, width*height, f) != width*height) {
+    delete[] img;
+    return NULL;
+  }
+  return img;
+}
+
+
+// Read an image in raw16 format given a filename; `NULL` indicates something went wrong.
+Image* Image::readRaw16(const char* fname) {
+  FILE *f = fopen(fname, "rb");
+  if (!f) return NULL;
+  Image* ans = readRaw16(f);
+  fclose(f);
+  return ans;
+}
+
+
+// Write a text version of this image
 void Image::println() const
 {
   printf("%d,%d %d,%d\n",bounds.near.x,bounds.near.y,bounds.far.x,bounds.far.y);
@@ -4595,6 +4658,70 @@ int Image8::writeTiff(const char *fname)
   return i;
 }
 
+
+
+// Write an image in "raw8" format to an open file.
+// Format is width (2 bytes), height (2 bytes), data X-major.
+// Everything is packed in native order.
+int Image8::writeRaw8(FILE *f) {
+  if (!f) return 1;
+  short header[] = { (short)bounds.width(), (short)bounds.height() };
+  if (fwrite(header, 2, 2, f) != 2) return 1;
+  if (bin <= 1 && bounds.near.x == 0 && bounds.near.y == 0 && size.x == bounds.width() && size.y == bounds.height()) {
+    if (fwrite(pixels, 1, size.x*size.y, f) != (unsigned int)(size.x*size.y)) return 1;
+  }
+  else {
+    uint8_t *buffer = new uint8_t[size.x * size.y];
+    int i = 0;
+    for (int x = 0; x < size.x; x++) for (int y = 0; y < size.y; y++) buffer[i++] = get(x, y);
+    bool problem = fwrite(buffer, 1, size.x*size.y, f) != (unsigned int)(size.x*size.y);
+    delete[] buffer;
+    if (problem) return 1;
+  }
+  return 0;
+}
+
+
+// Write an image to a raw8 file given the filename
+int Image8::writeRaw8(const char* fname) {
+  int i;
+  FILE *f = fopen(fname, "wb");
+  if (!f) return 1;
+  i = writeRaw8(f);
+  fclose(f);
+  return i;
+}
+
+
+// Read an image in "raw8" format to a new object allocated with `new`.
+// Format as in `writeRaw8(FILE*)`.
+// Returns `NULL` if anything goes wrong.
+Image8* Image8::readRaw8(FILE *f) {
+  short size[2];
+  if (fread(size, 2, 2, f) != 2) return NULL;
+  unsigned int width = size[0];
+  unsigned int height = size[1];
+  if (width < 0 || height < 0 || width > 32767 || height > 32767) return NULL;
+  Image8* img = new Image8(Point(width, height), false);
+  if (fread(img->pixels, 1, width*height, f) != width*height) {
+    delete[] img;
+    return NULL;
+  }
+  return img;
+}
+
+
+// Read an image in raw8 format given a filename; `NULL` indicates something went wrong.
+Image8* Image8::readRaw8(const char* fname) {
+  FILE *f = fopen(fname, "rb");
+  if (!f) return NULL;
+  Image8* ans = readRaw8(f);
+  fclose(f);
+  return ans;
+}
+
+
+// Print a text version of the image
 void Image8::println() const
 {
   printf("%d,%d %d,%d\n",bounds.near.x,bounds.near.y,bounds.far.x,bounds.far.y);
