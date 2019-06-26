@@ -188,11 +188,11 @@ int TrackerLibrary::setTrackerName(int handle, const char* name) {
 
 
 // Set the date in pieces.  Normally, don't do this--just let it pick its own date, or have one or all others adopt the date of one
-int TrackerLibrary::setDate(int handle,int year,int month,int day,int hour,int minute,int second)
+int TrackerLibrary::setDate(int handle,int year,int month,int day,int hour,int minute,int second,bool is_utc)
 {
   if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
   if (all_trackers[handle]==NULL) return -1;
-  all_trackers[handle]->setDate(year,month,day,hour,minute,second);
+  all_trackers[handle]->setDate(year,month,day,hour,minute,second,is_utc);
   return handle;  
 }
 
@@ -214,7 +214,8 @@ int TrackerLibrary::borrowDate(int handle,int donor_handle)
   else
   {
     all_trackers[handle]->setDate(te->output_date->tm_year,te->output_date->tm_mon+1,te->output_date->tm_mday,
-                                  te->output_date->tm_hour,te->output_date->tm_min,te->output_date->tm_sec);
+                                  te->output_date->tm_hour,te->output_date->tm_min,te->output_date->tm_sec,
+                                  te->is_utc);
   }
   
   return handle;  
@@ -233,7 +234,7 @@ int TrackerLibrary::setAllDatesToMine(int handle)
     if (handle == iterator->data) continue;
     else
     {
-      int i = borrowDate(handle,iterator->data);
+      int i = borrowDate(handle, iterator->data);
       if (i != handle) return i;
     }
   }
@@ -258,6 +259,17 @@ int TrackerLibrary::setOutput(int handle,const char *path,const char *prefix,boo
   return handle;  
 }
 
+// Set whether the times reported are UTC (overwritten if you set the date)
+int TrackerLibrary::setUTC(int handle, bool is_utc) {
+  if (handle < 1 || handle > MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle] == NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+  te->is_utc = is_utc;
+  
+  return handle;  
+}
+
 // Actually create output directories and get ready to go.
 int TrackerLibrary::beginOutput(int handle)
 {
@@ -266,7 +278,11 @@ int TrackerLibrary::beginOutput(int handle)
   
   TrackerEntry* te = all_trackers[handle];
   if (!te->output_info_known) return 0;
-  bool good = te->performance.prepareOutput(te->tracker_string,te->path_string,te->prefix_string,te->save_objects,te->save_refs,te->save_images,te->output_date);
+  bool good = te->performance.prepareOutput(
+    te->tracker_string,te->path_string, te->prefix_string, te->save_objects,
+    te->save_refs, te->save_images,
+    te->output_date, te->is_utc
+  );
   if (!good) return 0;
   te->output_started = true;
 
@@ -1912,7 +1928,7 @@ int test_mwt_library(int bin)
   i = a_library.setImageInfo(h3,8,512/bin,512/bin); if (i!=h3) return 102;
   i = a_library.setImageInfo(h4,8,512/bin,512/bin); if (i!=h4) return 103;
   i = a_library.setTrackerName(h1, "test"); if (i!=h1) return 300;
-  i = a_library.setDate(h1,2007,12,26,10,50,33); if (i!=h1) return 4;
+  i = a_library.setDate(h1,2007,12,26,10,50,33,false); if (i!=h1) return 4;
   i = a_library.borrowDate(h2,h1); if (i!=h2) return 5;
   i = a_library.borrowDate(h3,h1); if (i!=h3) return 104;
   i = a_library.borrowDate(h4,h1); if (i!=h4) return 105;

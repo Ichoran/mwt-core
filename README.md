@@ -1,6 +1,8 @@
 # mwt-core
 
-Version 2.0.0 alpha
+Version 2.0.1 alpha
+
+_Warning: use version 2.0.0 alpha (before 2019-06-26) if you want Windows DLL support._
 
 ## Introduction
 

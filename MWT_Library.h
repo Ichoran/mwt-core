@@ -103,6 +103,7 @@ public:
   bool save_refs;
   bool save_images;
   struct tm *output_date;
+  bool is_utc;
   int image_bits;  // Will need to use this when wrapping images from LabView--they don't say how many bits the camera has!
   int image_width;
   int image_height;
@@ -132,10 +133,10 @@ public:
     : handle(NULL),tracker_string(NULL),path_string(NULL),prefix_string(NULL),eventstore(0),summary(0)
   { }
   TrackerEntry(Listable<int> *new_handle,int buffer_size)  // Call this one using placement new 
-    : performance(new_handle->data,buffer_size),handle(new_handle),reference_edges(16,true),reference_objects(16,false),working(16,false),
+    : performance(new_handle->data,buffer_size), handle(new_handle), reference_edges(16,true), reference_objects(16,false), working(16,false),
       cached_profile(NULL),cached_profile_index(-1),
-      tracker_string(NULL),path_string(NULL),prefix_string(NULL),output_date(NULL),
-      update_frequency(1.0),eventstore(buffer_size,false) , summary(buffer_size,true)
+      tracker_string(NULL), path_string(NULL), prefix_string(NULL), output_date(NULL), is_utc(false),
+      update_frequency(1.0), eventstore(buffer_size,false), summary(buffer_size,true)
   {
     image_info_known = false;
     output_info_known = false;
@@ -162,7 +163,7 @@ public:
   void setTrackerName(const char *s) { if (tracker_string!=NULL) { delete[] tracker_string; } tracker_string = new char[strlen(s)+1]; strcpy(tracker_string, s); }
   void setPath(const char *s) { if (path_string!=NULL) { delete[] path_string; } path_string = new char[strlen(s)+1]; strcpy(path_string,s); }
   void setPrefix(const char *s) { if (prefix_string!=NULL) { delete[] prefix_string; } prefix_string = new char[strlen(s)+1]; strcpy(prefix_string,s); }
-  void setDate(int year,int month,int day,int hour,int minute,int second)
+  void setDate(int year,int month,int day,int hour,int minute,int second,bool is_utc)
   {
     if (output_date!=NULL) delete output_date;
     output_date = new struct tm;
@@ -172,6 +173,7 @@ public:
     output_date->tm_hour = hour;
     output_date->tm_min = minute;
     output_date->tm_sec = second;
+    this->is_utc = is_utc;
   }
 };
 
@@ -200,9 +202,10 @@ public:
   // Preparing output
 	int setCombineBlobs( int handle, bool type );
   int setTrackerName(int handle, const char *name);
-  int setDate(int handle,int year,int month,int day,int hour,int minute,int second);
+  int setDate(int handle,int year,int month,int day,int hour,int minute,int second,bool is_utc);
   int borrowDate(int handle,int donor_handle);
   int setAllDatesToMine(int handle);
+  int setUTC(int handle, bool is_utc);
   int setOutput(int handle,const char *path,const char *prefix,bool save_obj,bool save_ref,bool save_im);
   int beginOutput(int handle);
   int setAndBeginOutput(int handle,const char *path,const char *prefix,bool save_obj,bool save_ref,bool save_im)
