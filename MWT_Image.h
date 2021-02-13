@@ -598,8 +598,8 @@ public:
   void copy(Point where,const Image& source,Point size,bool fix_depth=false);
   void copy(const Image& source,Mask& m,bool fix_depth=false);
   void copy(const Image& source,bool fix_depth=false) { copy( source.bounds.near , source , source.size , fix_depth ); }
-  void adapt(Point where,const Image& im,Point size,int rate); // Adapting image has deeper bit depth
-  void adapt(const Image& im,Mask &m,int rate);
+  void adapt(Point where,const Image& im,Point size,int rate,int asym); // Adapting image has deeper bit depth
+  void adapt(const Image& im,Mask &m,int rate,int asym);
   void diffCopy(Point where,const Image& source,Point size,const Image& bg);  // Diffcopied image is effectively one bit deeper than source, bg is much deeper
   void diffCopy(const Image& source,Mask& m,const Image& bg);
   void diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,int rate);  // Same as diffCopy (but bg gets adapted)

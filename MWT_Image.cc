@@ -2099,7 +2099,8 @@ void Image::copy8(const Image8& source, Mask& m, bool fix_depth)
 
 
 // Adapt an image so that it is closer to a source image; requires rate>=0 and rate >= our depth - source depth
-void Image::adapt(Point where,const Image& im,Point size,int rate)
+// asym == 0 indicates that it goes the same way both up and down, otherwise it's slower up (+) or down (-) by that much.
+void Image::adapt(Point where, const Image& im, Point size, int rate, int asym)
 {
   // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int x,y;
@@ -2111,16 +2112,60 @@ void Image::adapt(Point where,const Image& im,Point size,int rate)
     where -= bounds.near;
     short *p = pixels + (where.x*this->size.y + where.y);
     short *q = im.pixels + (swhere.x*im.size.y + swhere.y);
-    if (imrate==0) for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += q[y] - (p[y]>>rate);
-    else if (irlz) for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += (q[y]<<imrate) - (p[y]>>rate);
-    else for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += (q[y]>>imrate) - (p[y]>>rate);
+    if (asym != 0) {
+      int rup = (asym > 0) ? rate + asym : rate;
+      int rdn = (asym < 0) ? rate - asym : rate;
+      int fix = depth - im.depth;
+      short i, d;
+      if (fix < 0) {
+        fix = -fix;
+        for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) {
+          i = p[y];
+          d = (q[y] >> fix) - i;
+          p[y] = (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn));
+        }
+      }
+      else {
+        printf("Shift left fix %d\n", fix);
+        for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) {
+          i = p[y];
+          d = (q[y] << fix) - i;
+          p[y] = (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn));
+        }
+      }
+    }
+    else if (imrate==0) for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += q[y] - (p[y]>>rate);
+    else if (irlz)      for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += (q[y]<<imrate) - (p[y]>>rate);
+    else                for (x=0;x<size.x;x++,p+=this->size.y,q+=im.size.y) for (y=0;y<size.x;y++) p[y] += (q[y]>>imrate) - (p[y]>>rate);
   }
   else {
     Point stop = where + size;
-    if (bin<=1) {
+    if (asym != 0) {
+      int rup = (asym > 0) ? rate + asym : rate;
+      int rdn = (asym < 0) ? rate - asym : rate;
+      int fix = depth - im.depth;
+      short i, d;
+      if (fix < 0) {
+        // Slower version only when binned.  Too bad for you!  You wanted things binned.
+        fix = -fix;
+        for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
+          i = get(x, y);
+          d = (im.get(x, y) >> fix) - i;
+          set(x, y, (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn)));
+        }
+      }
+      else {
+        for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) {
+          i = get(x, y);
+          d = (im.get(x, y) << fix) - i;
+          set(x, y, (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn)));
+        }
+      }
+    }
+    else if (bin<=1) {
       if (imrate==0) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += im.get(x,y) - (rare(x,y)>>rate);
       else if (irlz) for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += (im.get(x,y)<<imrate) - (rare(x,y)>>rate);
-      else for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += (im.get(x,y)>>imrate) - (rare(x,y)>>rate);
+      else           for (x=where.x;x<stop.x;x++) for (y=where.y;y<stop.y;y++) rare(x,y) += (im.get(x,y)>>imrate) - (rare(x,y)>>rate);
     }
     else {
       short I;
@@ -2132,13 +2177,17 @@ void Image::adapt(Point where,const Image& im,Point size,int rate)
 }
 
 // Same thing except adapt using a mask
-void Image::adapt(const Image& im,Mask &m,int rate)
+void Image::adapt(const Image& im,Mask &m,int rate,int asym)
 {
   // WARNING!  You must keep this up to date with the 8-bit-source implementation BY HAND!!
   int y,y0,y1;
   bool irlz = false;
   int imrate = rate - depth + im.depth;
   if (imrate<0) { irlz=true; imrate = -imrate; }
+  // rup, rdn, fix are used only if asym != 0, but easier to just create them here
+  int rup = (asym > 0) ? rate + asym : rate;
+  int rdn = (asym < 0) ? rate - asym : rate;
+  int fix = depth - im.depth;
   if (bin<=1 && im.bin<=1) {
     Rectangle safe = bounds * im.bounds;
     m.start();
@@ -2148,9 +2197,26 @@ void Image::adapt(const Image& im,Mask &m,int rate)
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0>y1) continue;
-      if (imrate==0) for (y=y0;y<=y1;y++) rare(m.i().x,y) += im.view(m.i().x,y) - (rare(m.i().x,y)>>rate);
-      else if (irlz) for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.view(m.i().x,y)<<imrate) - (rare(m.i().x,y)>>rate);
-      else for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.view(m.i().x,y)>>imrate) - (rare(m.i().x,y)>>rate);
+      if (asym != 0) {
+        short i, d;
+        if (fix < 0) {
+          for (y=y0;y<=y1;y++) {
+            i = rare(m.i().x,y);
+            d = (im.view(m.i().x,y) >> (-fix)) - i;
+            rare(m.i().x,y) = (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn));
+          }
+        }
+        else {
+          for (y=y0;y<=y1;y++) {
+            i = rare(m.i().x,y);
+            d = (im.view(m.i().x,y) << fix) - i;
+            rare(m.i().x,y) = (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn));
+          }
+        }
+      }
+      else if (imrate==0) for (y=y0;y<=y1;y++) rare(m.i().x,y) += im.view(m.i().x,y) - (rare(m.i().x,y)>>rate);
+      else if (irlz)      for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.view(m.i().x,y)<<imrate) - (rare(m.i().x,y)>>rate);
+      else                for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.view(m.i().x,y)>>imrate) - (rare(m.i().x,y)>>rate);
     }
   }
   else {
@@ -2163,7 +2229,24 @@ void Image::adapt(const Image& im,Mask &m,int rate)
       y0 = (m.i().y0 < safe.near.y) ? safe.near.y : m.i().y0;
       y1 = (m.i().y1 > safe.far.y) ? safe.far.y : m.i().y1;
       if (y0<=y1) {
-        if (bin<=1) {
+        if (asym != 0) {
+          short i, d;
+          if (fix < 0) {
+            for (y=y0;y<=y1;y++) {
+              i = get(m.i().x,y);
+              d = (im.get(m.i().x,y) >> (-fix)) - i;
+              set(m.i().x, y, (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn)));              
+            }
+          }
+          else {
+            for (y=y0;y<=y1;y++) {
+              i = get(m.i().x,y);
+              d = (im.get(m.i().x,y) << fix) - i;
+              set(m.i().x, y, (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn)));              
+            }
+          }
+        }
+        else if (bin<=1) {
       	  if (imrate==0) for (y=y0;y<=y1;y++) rare(m.i().x,y) += im.get(m.i().x,y) - (rare(m.i().x,y)>>rate);
       	  else if (irlz) for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.get(m.i().x,y)<<imrate) - (rare(m.i().x,y)>>rate);
       	  else for (y=y0;y<=y1;y++) rare(m.i().x,y) += (im.get(m.i().x,y)>>imrate) - (rare(m.i().x,y)>>rate);
@@ -4931,8 +5014,19 @@ int test_mwt_image_image()
   im1.depth = im2.depth = 6;
   Image im3(im2,im2.getBounds(),false);
   im3 = 55;
-  im3.adapt(Point(3,3),im2,Point(4,4),3);
+  im3.adapt(Point(3,3),im2,Point(4,4),3,0);
   if (im3.get(2,2)!=55 || im3.get(3,3)!=49 || im3.get(6,6)!=49 || im3.get(7,7)!=55) return 2;
+  Image im3b(Point(2, 2), false);
+  im3b.depth = 5;
+  im3b += Point(4, 4);
+  im3b.set(4, 4, 31);
+  im3b.set(4, 5, 0);
+  im3b.set(5, 4, 0);
+  im3b.set(5, 5, 31);
+  im3.adapt(Point(4, 4), im3b, Point(2, 2), 2, -1);
+  if (im3.get(3,3)!=49 || im3.get(4,4)!=52 || im3.get(4,5)!=43 || im3.get(5,4)!=43 || im3.get(5,5)!=52 || im3.get(6,6)!=49) return 2;
+  im3b = 49;
+  im3.copy(Point(4, 4), im3b, Point(2, 2));
   
   im1.diffCopy(Point(4,4),im3,Point(2,2),im2);  // im1 might actually be 7 bits deep now, but we can ignore that here
   im1.diffAdaptCopy(Point(2,2),im3,Point(2,2),im2,3);
@@ -4968,8 +5062,17 @@ int test_mwt_image_image()
   
   im3 = 55;
   Mask m3(Rectangle(Point(3,3),Point(6,6)),&slstor);
-  im3.adapt(im2,m3,3);
+  im3.adapt(im2, m3, 3, 0);
   if (im3.get(2,2)!=55 || im3.get(3,3)!=49 || im3.get(6,6)!=49 || im3.get(7,7)!=55) return 7;
+  im3b.set(4, 4, 31);
+  im3b.set(4, 5, 0);
+  im3b.set(5, 4, 0);
+  im3b.set(5, 5, 31);
+  Mask m3b(Rectangle(Point(4, 4), Point(5, 5)),&slstor);
+  im3.adapt(im3b, m3b, 2, -1);
+  if (im3.get(3,3)!=49 || im3.get(4,4)!=52 || im3.get(4,5)!=43 || im3.get(5,4)!=43 || im3.get(5,5)!=52 || im3.get(6,6)!=49) return 2;
+  im3b = 49;
+  im3.copy(Point(4, 4), im3b, Point(2, 2));
   
   Mask m4(Rectangle(Point(4,4),Point(5,5)),&slstor);
   Mask m5(Rectangle(Point(2,2),Point(3,3)),&slstor);
