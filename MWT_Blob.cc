@@ -1208,12 +1208,12 @@ int Performance::initialScan(Image *fg,double time)
     
     /*
      * NOTE: This call corrects for any change that may have happened to the image size, perhaps due to a change in binning.
-     *       There is a performance hit for this call, however, as it should only occur during initialization, it should be an allowable hit.
-     *       A more intelligent implementation would be to move this call to the function that changes the libary's binning dimension. The problem there
-     *       is that this function is based off an image which may or may not exist when the binning change function is called.
+     *    There is a performance hit for this call, however, as it should only occur during initialization, it should be an allowable hit.
+     *    A more intelligent implementation would be to move this call to the function that changes the libary's binning dimension. The problem there
+     *    is that this function is based off an image which may or may not exist when the binning change function is called.
      */
     setNotInROI(foreground);
-    foreground->diffAdaptCopy( (*fg) , (*full_area) , (*background) , adapt_rate );
+    foreground->diffAdaptCopy( (*fg) , (*full_area) , (*background) , adapt_rate , adapt_asym );
     
     n = scanImage(foreground);
     if (n==0) return 0;
@@ -1513,7 +1513,7 @@ void Performance::loadNextSingleItem(Image* fg)
       // We already prepared the image when we checked it, so we just need to load it
       band->depth = fg->depth+1;
       *band = 1 << (band->depth-1);  // Initialize to gray
-      band->diffAdaptCopy(*fg,*band_area,*background,adapt_rate);
+      band->diffAdaptCopy(*fg,*band_area,*background,adapt_rate,adapt_asym);
       load_state = all_loaded;
       break;
     case all_loaded:

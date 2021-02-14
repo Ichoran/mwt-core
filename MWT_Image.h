@@ -602,8 +602,8 @@ public:
   void adapt(const Image& im,Mask &m,int rate,int asym);
   void diffCopy(Point where,const Image& source,Point size,const Image& bg);  // Diffcopied image is effectively one bit deeper than source, bg is much deeper
   void diffCopy(const Image& source,Mask& m,const Image& bg);
-  void diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,int rate);  // Same as diffCopy (but bg gets adapted)
-  void diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate);
+  void diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,int rate,int asym);  // Same as diffCopy (but bg gets adapted)
+  void diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate,int asym);
 
   // Same as above but using 8 bit images as a source
   void mimic8(const Image8& source , Rectangle my_region , Rectangle source_region , ScaleType method = Subsample);
@@ -611,8 +611,8 @@ public:
   void copy8(Point where,const Image8& source,Point size,bool fix_depth=false);
   void copy8(const Image8& source,Mask& m,bool fix_depth=false);
   void copy8(const Image8& source,bool fix_depth=false);
-  void adapt8(Point where,const Image8& im,Point size,int rate); // Adapting image has deeper bit depth
-  void adapt8(const Image8& im,Mask &m,int rate);
+  void adapt8(Point where,const Image8& im,Point size,int rate,int asym); // Adapting image has deeper bit depth
+  void adapt8(const Image8& im,Mask &m,int rate,int asym);
   void diffCopy8(Point where,const Image8& source,Point size,const Image& bg);  // Diffcopied image is effectively one bit deeper than source, bg is much deeper
   void diffCopy8(const Image8& source,Mask& m,const Image& bg);
   void diffAdaptCopy8(Point where,const Image8& source,Point size,Image& bg,int rate);  // Same as diffCopy (but bg gets adapted)
