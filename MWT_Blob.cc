@@ -1547,7 +1547,7 @@ void Performance::loadNextSingleItem8(Image8* fg)
       // We already prepared the image when we checked it, so we just need to load it
       band->depth = 9;
       *band = 256;  // Initialize to gray
-      band->diffAdaptCopy8(*fg, *band_area, *background, adapt_rate);
+      band->diffAdaptCopy8(*fg, *band_area, *background, adapt_rate, adapt_asym);
       load_state = all_loaded;
       break;
     case all_loaded:

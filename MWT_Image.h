@@ -618,8 +618,8 @@ public:
   void adapt8(const Image8& im,Mask &m,int rate,int asym);
   void diffCopy8(Point where,const Image8& source,Point size,const Image& bg);  // Diffcopied image is effectively one bit deeper than source, bg is much deeper
   void diffCopy8(const Image8& source,Mask& m,const Image& bg);
-  void diffAdaptCopy8(Point where,const Image8& source,Point size,Image& bg,int rate);  // Same as diffCopy (but bg gets adapted)
-  void diffAdaptCopy8(const Image8& source,Mask& m,Image& bg,int rate);
+  void diffAdaptCopy8(Point where,const Image8& source,Point size,Image& bg,int rate,int asym);  // Same as diffCopy (but bg gets adapted)
+  void diffAdaptCopy8(const Image8& source,Mask& m,Image& bg,int rate,int asym);
 
   // Projections
   void maxOverX(Rectangle target, short *output);
@@ -747,9 +747,12 @@ public:
   inline uint8_t& rare(Point p) { return pixels[(p.y-bounds.near.y) + size.y*(p.x-bounds.near.x)]; }
   inline uint8_t view(int x,int y) const { return pixels[(y-bounds.near.y) + size.y*(x-bounds.near.x)]; }
   inline uint8_t view(Point p) const { return peek(p-bounds.near); }
-  // "Vector" access to underlying data (packed in ints)
+  // "Vector" access to underlying data (packed in shorts)
   inline unsigned short& rareS(int x,int y) { return *((unsigned short*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
   inline unsigned short viewS(int x,int y) const { return *((unsigned short*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  // Longer "Vector" access to underlying data (packed in unsigned ints)
+  inline uint32_t& rareI(int x,int y) { return *((uint32_t*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  inline uint32_t viewI(int x,int y) const { return *((uint32_t*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
   // Access to data in global coordinates, with binning as needed
   inline uint8_t get(int x,int y) const {
     if (bin<=1) return peek(x-bounds.near.x,y-bounds.near.y);
