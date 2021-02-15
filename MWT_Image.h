@@ -522,8 +522,11 @@ public:
   inline short view(int x,int y) const { return pixels[(y-bounds.near.y) + size.y*(x-bounds.near.x)]; }
   inline short view(Point p) const { return peek(p-bounds.near); }
   // "Vector" access to underlying data (packed in ints)
-  inline int& rareI(int x,int y) { return *((int*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  inline int& rareI(int x,int y)      { return *((int*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
   inline int viewI(int x,int y) const { return *((int*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  // Longer "Vector" access to underlying data (packed in ints)
+  inline uint64_t& rareL(int x, int y)      { return *((uint64_t*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
+  inline uint64_t viewL(int x, int y) const { return *((uint64_t*)(pixels + ((y-bounds.near.y) + size.y*(x-bounds.near.x)))); }
   // Access to data in global coordinates, with binning as needed
   inline short get(int x,int y) const
   {

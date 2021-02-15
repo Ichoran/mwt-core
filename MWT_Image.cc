@@ -2749,20 +2749,23 @@ void Image::diffAdaptCopy(Point where,const Image& source,Point size,Image& bg,i
     Point stop = where + size;
     int rup = (asym > 0) ? rate + asym : rate;
     int rdn = (asym < 0) ? rate - asym : rate;
-    int fix = bg.depth - source.depth;
     for (x=where.x;x<stop.x;x++) {
       for (y=where.y;y<stop.y;y++) {
       	I = bg.get(x,y);
       	J = source.get(x,y);
         if (asym != 0) {
-          // TODO
+          d = (J << shift) - I;
+          bg.set(x, y, (d > 0) ? (I + (d >> rup)) : (I - ((-d) >> rdn)));
+          set(x, y, gray + (d >> shift));
         }
-      	else if (srcrate==0) I += J - (I>>rate);
-      	else if (sclz) I += (J<<srcrate) - (I>>rate);
-      	else I += (J>>srcrate) - (I>>rate);
-      	bg.set(x,y,I);
-        if (divide_bg) set(x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
-      	else set(x,y , J - (I>>shift) + gray);
+        else {
+        	if (srcrate==0) I +=  J           - (I>>rate);
+        	else if (sclz)  I += (J<<srcrate) - (I>>rate);
+        	else            I += (J>>srcrate) - (I>>rate);
+        	bg.set(x,y,I);
+          if (divide_bg) set(x,y , ((1+(unsigned int)J)<<(source.depth+1)) / (2 + (unsigned int)J + (unsigned int)(I>>shift)));
+        	else set(x,y , J - (I>>shift) + gray);
+        }
       }
     }
   }
@@ -2789,7 +2792,18 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate,int asy
     int dualgray = ((int)gray) | (((int)gray)<<16);
     int dualshiftmask = shiftmask | (shiftmask<<16);
     int dualratemask = ratemask | (ratemask<<16);
-    int dualsrcratemask = srcratemask | (srcratemask<<16);  
+    int dualsrcratemask = srcratemask | (srcratemask<<16);
+    // Variables for 4 short version (asymmetric rate only, but we'll calculate them all here)
+    int rup = (asym > 0) ? rate + asym : rate;
+    int rdn = (asym < 0) ? rate - asym : rate;
+    int rupmask = 0xFFFF >> rup;
+    int rdnmask = 0xFFFF >> rdn;
+    uint64_t quadrupmask = ((uint64_t)rupmask) | (((uint64_t)rupmask) << 16) | (((uint64_t)rupmask) << 32) | (((uint64_t)rupmask) << 48);
+    uint64_t quadrdnmask = ((uint64_t)rdnmask) | (((uint64_t)rdnmask) << 16) | (((uint64_t)rdnmask) << 32) | (((uint64_t)rdnmask) << 48);
+    int bg_gray = 1 << bg.depth;
+    uint64_t quad_bg_gray = ((uint64_t)bg_gray) | (((uint64_t)bg_gray) << 16) | (((uint64_t)bg_gray) << 32) | (((uint64_t)bg_gray) << 48);
+    uint64_t quadshiftmask = ((uint64_t) dualshiftmask) | (((uint64_t)dualshiftmask) << 32);
+
   
     Rectangle safe = bounds * source.bounds * bg.bounds;
     
@@ -2802,7 +2816,22 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate,int asy
       if (y0>y1) continue;
       x = m.i().x;
       if (asym != 0) {
-        // TODO
+        short i, d;
+        uint64_t I, J, D, M;        
+        for (y=y0;y+4<=y1;y+=4) {
+          I = bg.rareL(x, y);
+          J = source.viewL(x, y) << shift;
+          D = (quad_bg_gray - I) + J;
+          M = ((D & quad_bg_gray) >> bg.depth) * 0xFFFFll;
+          rareL(x, y) = (D >> shift) & quadshiftmask;
+          bg.rareL(x, y) = I + ((((J&M) - (I&M)) >> rup) & quadrupmask) - ((((I&~M) - (J&~M)) >> rdn) & quadrdnmask);
+        }
+        for(;y<=y1;y++) {
+          i = bg.rare(x, y);
+          d = (source.view(x, y) << shift) - i;
+          bg.rare(x, y) = (d > 0) ? (i + (d >> rup)) : (i - ((-d) >> rdn));
+          rare(x, y) = gray + (d >> shift);          
+        }
       }
       else if (sclz) {
         if (divide_bg) {
@@ -2845,7 +2874,7 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate,int asy
     }
   }
   else {
-    short I,J;
+    short I, J, d;
     Rectangle safe = getBounds() * source.getBounds() * bg.getBounds();
     m.start();
     while (m.advance()) {
@@ -2856,7 +2885,14 @@ void Image::diffAdaptCopy(const Image& source,Mask& m,Image& bg,int rate,int asy
       if (y0 > y1) continue;
       
       if (asym != 0) {
-        // TODO
+        int rup = (asym > 0) ? rate + asym : rate;
+        int rdn = (asym < 0) ? rate - asym : rate;
+        for (y=y0;y<=y1;y++) {
+          I = bg.get(m.i().x, y);
+          d = (source.get(m.i().x, y) << shift) - I;
+          bg.set(m.i().x, y, (d > 0) ? (I + (d >> rup)) : (I - ((-d) >> rdn)));
+          set(m.i().x, y, gray + (d >> shift));
+        }
       }
       else if (sclz) {
         for (y=y0;y<=y1;y++) {
@@ -5194,13 +5230,21 @@ int test_mwt_image_image()
   
   im1.diffAdaptCopy(im3,m5,im2,3,0);
   im4.diffAdaptCopy(im6,m5,im5,3,0);
-  //for (x=0;x<im1.size.x;x++) for (y=0;y<im1.size.y;y++) printf("%d %d -> %d %d\n",x,y,(int)im2.get(x,y),(int)im5.get(x,y));
   for (x=0;x<im1.size.x;x++) for (y=0;y<im1.size.y;y++) if (im1.get(x,y) != im4.get(x,y)) return 11;
   for (x=im2.bounds.near.x;x<=im2.bounds.far.x;x++) for (y=im2.bounds.near.y;y<=im2.bounds.far.y;y++) if (im2.get(x,y) != im5.get(x,y)) return 12;
-  
+
 #ifndef DIVIDE_BG
   if (im1.get(1,1)!=0 || im1.get(2,2)!=44+64 || im1.get(3,3)!=38+64 || im1.get(4,4)!=44+64 || im1.get(6,6)!=5) return 13;
 #endif
+  
+  im1b.copy(im1);
+  Mask m5b(Rectangle(Point(2, 2), Point(8, 8)), &slstor);
+  im2.set(2, 2, 0);
+  im5.set(2, 2, 0);
+  im1b.diffAdaptCopy(im3, m5b, im2, 2, -1);
+  im4.diffAdaptCopy(im6, m5b, im5, 2, -1);
+  for (x=0;x<im1.size.x;x++) for (y=0;y<im1.size.y;y++) if (im1b.get(x,y) != im4.get(x,y)) return 11;
+  for (x=im2.bounds.near.x;x<=im2.bounds.far.x;x++) for (y=im2.bounds.near.y;y<=im2.bounds.far.y;y++) if (im2.get(x,y) != im5.get(x,y)) return 12;
   
   im1.diffCopy(im1,m,im1);
   im1.set(3,3 , 38);
