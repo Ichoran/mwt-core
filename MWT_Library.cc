@@ -1026,6 +1026,23 @@ int TrackerLibrary::setAdaptationRate(int handle,int alpha)
 }
 
 
+// Set asymmetry of rate (negative = get dark slowly, positive = get bright slowly)
+// generally want to go slow in the direction you're detecting
+int TrackerLibrary::setAdaptationAsymmetry(int handle,int alpha)
+{
+  if (handle<1 || handle>MAX_TRACKER_HANDLES) return -1;
+  if (all_trackers[handle]==NULL) return -1;
+  
+  TrackerEntry* te = all_trackers[handle];
+
+  if (alpha<-6) alpha = -6;
+  if (alpha>6) alpha = 6;
+  te->performance.adapt_asym = alpha;
+  
+  return handle;
+}
+
+
 // Finds moving objects in the image without tracking them
 // Does NOT return the handle; returns the number of objects found
 int TrackerLibrary::scanObjects(int handle,Image& im)

@@ -283,6 +283,7 @@ public:
   int setObjectSizeThresholds(int handle,int small_size,int small_good_size,int large_good_size,int large_size);
   int setObjectPersistenceThreshold(int handle,int frames);
   int setAdaptationRate(int handle,int alpha);
+  int setAdaptationAsymmetry(int handle,int alpha);
   int scanObjects(int handle,Image& im);
   int showObjects(int handle,Image& im);
   // 8-bit image versions
