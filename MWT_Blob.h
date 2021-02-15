@@ -368,6 +368,7 @@ public:
   // Image data
   int bg_depth;        // Depth in bits of background image
   int adapt_rate;      // Background is updated with a decay rate of 2^(-adapt_rate)
+  int adapt_asym;      // If +, update slower in bright direction, if -, slower in dark direction.  (Adds abs value to adapt_rate.)
   Image* foreground;   // Main image (local copy)
   Image* background;   // Reference image to subtract from main image
   Mask* full_area;     // Place to do background subtraction and find objects
@@ -439,6 +440,7 @@ public:
     // Image data 
     bg_depth(DEFAULT_BG_DEPTH),
     adapt_rate(DEFAULT_ADAPT_RATE),
+    adapt_asym(0),
     foreground(NULL),
     background(NULL),
     full_area(NULL),
